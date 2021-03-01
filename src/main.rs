@@ -1,3 +1,5 @@
+mod render;
+
 use cgmath::prelude::*;
 use cgmath::Zero;
 use cgmath::{point3, Point3, Vector3};
@@ -101,4 +103,5 @@ fn main() {
 
         //println!("{:?}: {:?}", i, density)
     }
+    render::open_window();
 }
