@@ -103,5 +103,6 @@ fn main() {
 
         //println!("{:?}: {:?}", i, density)
     }
-    render::open_window();
+
+    render::open_window(&s.positions);
 }

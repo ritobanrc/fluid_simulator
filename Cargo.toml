@@ -13,6 +13,7 @@ num = "0.3.1"
 winit = "0.22"
 wgpu = "0.7.0"
 futures = "0.3"
+bytemuck = { version = "1.5", features = [ "derive" ] }
 
 [build-dependencies]
 anyhow = "1.0"
