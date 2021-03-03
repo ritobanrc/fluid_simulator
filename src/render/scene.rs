@@ -1,12 +1,13 @@
 /// This module contains all of the _data_ that is going to be sent to the GPU. Essentially, all
 /// of the data that describes the scene. This includes vertex buffers, uniforms, the clear color,
 /// and camera position.
-use crate::render::Camera;
+use crate::render::{Camera, CameraController};
 use wgpu::util::DeviceExt;
 
 pub struct Scene {
     pub clear_color: [f32; 3],
     pub camera: Camera,
+    pub camera_controller: CameraController,
     pub vertex_buffer: wgpu::Buffer,
     pub uniforms: Uniforms,
     pub uniform_state: UniformState,
@@ -23,6 +24,7 @@ impl Scene {
         Self {
             clear_color: [0., 0., 0.],
             camera,
+            camera_controller: CameraController::new(0.2),
             vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
                 contents: bytemuck::cast_slice(verts),
@@ -72,7 +74,7 @@ impl Uniforms {
         }
     }
 
-    fn update_view_proj(&mut self, camera: &Camera) {
+    pub fn update_view_proj(&mut self, camera: &Camera) {
         self.view_proj = camera.build_view_projection_matrix().into();
     }
 }

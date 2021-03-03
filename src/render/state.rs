@@ -1,5 +1,4 @@
 use crate::render::{Scene, Vertex};
-use cgmath::Vector3;
 use wgpu::{
     Adapter, Device, Instance, Queue, RenderPipeline, Surface, SwapChain, SwapChainDescriptor,
 };
@@ -141,11 +140,19 @@ impl State {
         self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
     }
 
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        false
+    pub fn input(&mut self, event: &WindowEvent, scene: &mut Scene) -> bool {
+        scene.camera_controller.process_events(event)
     }
 
-    pub fn update(&mut self) {}
+    pub fn update(&mut self, scene: &mut Scene) {
+        scene.camera_controller.update_camera(&mut scene.camera);
+        scene.uniforms.update_view_proj(&scene.camera);
+        self.queue.write_buffer(
+            &scene.uniform_state.buffer,
+            0,
+            bytemuck::cast_slice(&[scene.uniforms]),
+        );
+    }
 
     pub fn render(&mut self, scene: &Scene) -> Result<(), wgpu::SwapChainError> {
         let frame = self.swap_chain.get_current_frame()?.output;

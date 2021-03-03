@@ -9,7 +9,7 @@ mod camera;
 mod scene;
 mod state;
 
-pub use camera::Camera;
+pub use camera::{Camera, CameraController};
 pub use scene::{Scene, Vertex};
 pub use state::State;
 
@@ -34,21 +34,10 @@ pub fn open_window(verticies: &[Vertex]) {
                     virtual_keycode: Some(VirtualKeyCode::Escape),
                     ..
                 } => *control_flow = ControlFlow::Exit,
-                _ => {}
-            },
-            WindowEvent::MouseInput {
-                device_id: _device_id,
-                state,
-                ..
-            } => {
-                if let winit::event::ElementState::Released = state {
-                    scene.clear_color = [
-                        rand::random::<f32>(),
-                        rand::random::<f32>(),
-                        rand::random::<f32>(),
-                    ]
+                _ => {
+                    state.input(event, &mut scene);
                 }
-            }
+            },
             WindowEvent::Resized(physical_size) => {
                 state.resize(*physical_size);
             }
@@ -56,10 +45,14 @@ pub fn open_window(verticies: &[Vertex]) {
                 // new_inner_size is &&mut so we have to dereference it twice
                 state.resize(**new_inner_size);
             }
-            _ => {}
+            window_event => {
+                // TODO: figure out what to do with this bool
+                //       basically, make a better input system in general
+                state.input(window_event, &mut scene);
+            }
         },
         Event::RedrawRequested(_) => {
-            state.update();
+            state.update(&mut scene);
             match state.render(&scene) {
                 Ok(_) => {}
                 // Recreate the swap_chain if lost
