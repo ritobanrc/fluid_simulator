@@ -1,8 +1,9 @@
 mod render;
 
 use cgmath::prelude::*;
-use cgmath::Zero;
 use cgmath::{point3, Point3, Vector3};
+use rand::Rng;
+use render::Vertex;
 
 trait SPHDiscretization {}
 
@@ -10,11 +11,11 @@ type ParticleIdx = usize;
 type Scalar = f32;
 type Vec3 = Vector3<Scalar>;
 
-struct Simulation {
-    masses: Vec<Scalar>,
-    positions: Vec<Point3<Scalar>>,
-    velocities: Vec<Point3<Scalar>>,
-    accelerations: Vec<Point3<Scalar>>,
+pub struct Simulation {
+    pub masses: Vec<Scalar>,
+    pub positions: Vec<Point3<Scalar>>,
+    pub velocities: Vec<Point3<Scalar>>,
+    pub accelerations: Vec<Point3<Scalar>>,
 }
 
 trait SmoothingKernel {
@@ -56,7 +57,7 @@ impl SmoothingKernel for Poly6Kernel {
         let c = 315. / (64. * std::f32::consts::PI * h.powi(9));
         let mag2 = r.magnitude2();
         if mag2 <= h * h && mag2 > 0. {
-            (h * h - mag2).powi(3)
+            c * (h * h - mag2).powi(3)
         } else {
             0.
         }
@@ -66,7 +67,7 @@ impl SmoothingKernel for Poly6Kernel {
         let c = 315. / (64. * std::f32::consts::PI * h.powi(9));
         let mag2 = r.magnitude2();
         if mag2 <= h * h && mag2 > 0. {
-            3. * -2. * mag2.sqrt() * (h * h - mag2) * (h * h - mag2)
+            c * 3. * -2. * mag2.sqrt() * (h * h - mag2) * (h * h - mag2)
         } else {
             0.
         }
@@ -82,27 +83,35 @@ fn main() {
         accelerations: Vec::new(),
     };
 
+    let mut rng = rand::thread_rng();
+
     let h = 1.;
-    for i in 0..num_particles {
+    for _i in 0..num_particles {
         s.masses.push(1.0);
         s.positions.push(point3(
-            rand::random::<Scalar>() * 2. - 1.,
-            rand::random::<Scalar>() * 2. - 1.,
-            rand::random::<Scalar>() * 2. - 1.,
+            rng.gen::<Scalar>() * 2. - 1.,
+            rng.gen::<Scalar>() * 2. - 1.,
+            rng.gen::<Scalar>() * 2. - 1.,
         ));
         s.velocities.push(point3(0., 0., 0.));
         s.accelerations.push(point3(0., 0., 0.));
     }
 
+    let mut verts = Vec::with_capacity(num_particles);
+
     for i in 0..num_particles {
         let density: Scalar = (0..num_particles)
-            .map(|j| s.masses[j] * SpikyKernel::value(s.positions[i] - s.positions[j], h))
+            .map(|j| s.masses[j] * Poly6Kernel::value(s.positions[i] - s.positions[j], h))
             .sum();
 
-        let x: [Scalar; 3] = s.positions[i].into();
+        dbg!(density);
 
-        //println!("{:?}: {:?}", i, density)
+        let pos = s.positions[i];
+        verts.push(Vertex {
+            position: [pos.x, pos.y, pos.z],
+            color: [density / 150., 1., density / 150.],
+        });
     }
 
-    render::open_window(&s.positions);
+    render::open_window(&verts);
 }

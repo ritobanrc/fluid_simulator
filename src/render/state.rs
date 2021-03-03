@@ -14,7 +14,7 @@ pub struct State {
     pub sc_desc: SwapChainDescriptor,
     pub swap_chain: SwapChain,
     pub size: winit::dpi::PhysicalSize<u32>,
-    pub render_pipeline: RenderPipeline,
+    pub render_pipeline: Option<RenderPipeline>,
 }
 
 fn create_instance() -> Instance {
@@ -66,6 +66,53 @@ fn create_swapchain(
     (sc_desc, swap_chain)
 }
 
+fn create_render_pipeline(device: &Device, scene: &Scene) -> RenderPipeline {
+    let vs_module = device.create_shader_module(&wgpu::include_spirv!("../shader.vert.spv"));
+    let fs_module = device.create_shader_module(&wgpu::include_spirv!("../shader.frag.spv"));
+
+    let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Render Pipeline Layout"),
+        bind_group_layouts: &[&scene.uniform_state.bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Render Pipeline"),
+        layout: Some(&render_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &vs_module,
+            entry_point: "main",
+            buffers: &[Vertex::desc()],
+        },
+        fragment: Some(wgpu::FragmentState {
+            // 2.
+            module: &fs_module,
+            entry_point: "main",
+            targets: &[wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Bgra8UnormSrgb, // NOTE: Don't hardcode this
+                color_blend: wgpu::BlendState::REPLACE,
+                alpha_blend: wgpu::BlendState::REPLACE,
+                write_mask: wgpu::ColorWrite::ALL,
+            }],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::PointList,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: wgpu::CullMode::Back,
+            strip_index_format: None,
+            polygon_mode: wgpu::PolygonMode::Fill,
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        },
+    });
+
+    render_pipeline
+}
+
 impl State {
     // Creating some of the wgpu types requires async code
     pub async fn new(window: &Window) -> Self {
@@ -76,50 +123,6 @@ impl State {
         let (device, queue) = create_device_queue(&adapter).await;
         let (sc_desc, swap_chain) = create_swapchain(&surface, &device, window.inner_size());
 
-        let vs_module = device.create_shader_module(&wgpu::include_spirv!("../shader.vert.spv"));
-        let fs_module = device.create_shader_module(&wgpu::include_spirv!("../shader.frag.spv"));
-
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
-                push_constant_ranges: &[],
-            });
-
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &vs_module,
-                entry_point: "main",
-                buffers: &[Vertex::desc()],
-            },
-            fragment: Some(wgpu::FragmentState {
-                // 2.
-                module: &fs_module,
-                entry_point: "main",
-                targets: &[wgpu::ColorTargetState {
-                    format: sc_desc.format,
-                    color_blend: wgpu::BlendState::REPLACE,
-                    alpha_blend: wgpu::BlendState::REPLACE,
-                    write_mask: wgpu::ColorWrite::ALL,
-                }],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::PointList,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: wgpu::CullMode::Back,
-                strip_index_format: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-        });
-
         Self {
             surface,
             device,
@@ -127,7 +130,7 @@ impl State {
             sc_desc,
             swap_chain,
             size: window.inner_size(),
-            render_pipeline,
+            render_pipeline: None,
         }
     }
 
@@ -169,9 +172,18 @@ impl State {
             }],
             depth_stencil_attachment: None,
         });
-        render_pass.set_pipeline(&self.render_pipeline);
+
+        let render_pipeline = if let Some(ref render_pipeline) = self.render_pipeline {
+            render_pipeline
+        } else {
+            self.render_pipeline = Some(create_render_pipeline(&self.device, scene));
+            self.render_pipeline.as_ref().unwrap()
+        };
+
+        render_pass.set_pipeline(&render_pipeline);
 
         render_pass.set_vertex_buffer(0, scene.vertex_buffer.slice(..));
+        render_pass.set_bind_group(0, &scene.uniform_state.bind_group, &[]);
         render_pass.draw(0..1000, 0..1);
 
         drop(render_pass);

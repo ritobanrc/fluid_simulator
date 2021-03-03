@@ -1,31 +1,26 @@
-use cgmath::{vec3, Point3};
 use futures::executor::block_on;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
-    window::{Window, WindowBuilder},
+    window::WindowBuilder,
 };
 
+mod camera;
 mod scene;
 mod state;
 
+pub use camera::Camera;
 pub use scene::{Scene, Vertex};
 pub use state::State;
 
-pub fn open_window(particles: &[Point3<f32>]) {
+pub fn open_window(verticies: &[Vertex]) {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
     let mut state = block_on(state::State::new(&window));
 
-    let verts: Vec<Vertex> = particles
-        .into_iter()
-        .map(|p| Vertex {
-            position: [p.x, p.y, p.z],
-            color: [0.1, 0.1, 0.1],
-        })
-        .collect();
-    let mut scene = Scene::new(&state.device, &verts);
+    let size = window.inner_size();
+    let mut scene = Scene::new(verticies, &state.device, (size.width, size.height));
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
