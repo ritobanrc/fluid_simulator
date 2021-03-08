@@ -144,7 +144,7 @@ impl State {
         scene.camera_controller.process_events(event)
     }
 
-    pub fn update(&mut self, scene: &mut Scene) {
+    pub fn update(&mut self, scene: &mut Scene, verts: &[Vertex]) {
         scene.camera_controller.update_camera(&mut scene.camera);
         scene.uniforms.update_view_proj(&scene.camera);
         self.queue.write_buffer(
@@ -152,6 +152,9 @@ impl State {
             0,
             bytemuck::cast_slice(&[scene.uniforms]),
         );
+
+        self.queue
+            .write_buffer(&scene.vertex_buffer, 0, bytemuck::cast_slice(verts));
     }
 
     pub fn render(&mut self, scene: &Scene) -> Result<(), wgpu::SwapChainError> {
@@ -180,12 +183,10 @@ impl State {
             depth_stencil_attachment: None,
         });
 
-        let render_pipeline = if let Some(ref render_pipeline) = self.render_pipeline {
-            render_pipeline
-        } else {
-            self.render_pipeline = Some(create_render_pipeline(&self.device, scene));
-            self.render_pipeline.as_ref().unwrap()
-        };
+        let device = &self.device;
+        let render_pipeline = &self
+            .render_pipeline
+            .get_or_insert_with(|| create_render_pipeline(device, scene));
 
         render_pass.set_pipeline(&render_pipeline);
 

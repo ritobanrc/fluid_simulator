@@ -1,4 +1,5 @@
 use futures::executor::block_on;
+use std::sync::mpsc::{Receiver, RecvError};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -13,14 +14,15 @@ pub use camera::{Camera, CameraController};
 pub use scene::{Scene, Vertex};
 pub use state::State;
 
-pub fn open_window(verticies: &[Vertex]) {
+pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
     let mut state = block_on(state::State::new(&window));
 
     let size = window.inner_size();
-    let mut scene = Scene::new(verticies, &state.device, (size.width, size.height));
+    let verticies = rx.recv()?;
+    let mut scene = Scene::new(&verticies, &state.device, (size.width, size.height));
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -52,7 +54,8 @@ pub fn open_window(verticies: &[Vertex]) {
             }
         },
         Event::RedrawRequested(_) => {
-            state.update(&mut scene);
+            let verticies = rx.recv().expect("Failed to recieve verts");
+            state.update(&mut scene, &verticies);
             match state.render(&scene) {
                 Ok(_) => {}
                 // Recreate the swap_chain if lost

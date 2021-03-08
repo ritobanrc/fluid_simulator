@@ -28,7 +28,7 @@ impl Scene {
             vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
                 contents: bytemuck::cast_slice(verts),
-                usage: wgpu::BufferUsage::VERTEX,
+                usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
             }),
             uniforms,
             uniform_state,
