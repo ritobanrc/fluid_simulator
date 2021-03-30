@@ -8,6 +8,7 @@ pub struct Scene {
     pub clear_color: [f32; 3],
     pub camera: Camera,
     pub camera_controller: CameraController,
+    pub num_particles: u32,
     pub vertex_buffer: wgpu::Buffer,
     pub uniforms: Uniforms,
     pub uniform_state: UniformState,
@@ -25,6 +26,7 @@ impl Scene {
             clear_color: [0., 0., 0.],
             camera,
             camera_controller: CameraController::new(0.2),
+            num_particles: verts.len() as u32,
             vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
                 contents: bytemuck::cast_slice(verts),

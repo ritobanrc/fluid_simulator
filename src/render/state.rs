@@ -192,7 +192,7 @@ impl State {
 
         render_pass.set_vertex_buffer(0, scene.vertex_buffer.slice(..));
         render_pass.set_bind_group(0, &scene.uniform_state.bind_group, &[]);
-        render_pass.draw(0..1000, 0..1);
+        render_pass.draw(0..scene.num_particles, 0..1);
 
         drop(render_pass);
 
