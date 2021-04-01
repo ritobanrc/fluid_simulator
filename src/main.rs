@@ -46,9 +46,9 @@ fn main() {
 
     let h = 0.1;
     // Water column scenario
-    for x in linspace(0., 1., 10) {
-        for y in linspace(0., 2., 20) {
-            for z in linspace(0., 1., 10) {
+    for x in linspace(0., 0.5, 5) {
+        for y in linspace(0., 1., 10) {
+            for z in linspace(0., 0.5, 5) {
                 let jitter_x = rng.gen::<f32>() * h / 8. - h / 16.;
                 let jitter_z = rng.gen::<f32>() * h / 8. - h / 16.;
                 s.add_particle(point3(x + jitter_x, y, z + jitter_z));
@@ -62,7 +62,7 @@ fn main() {
     let delta_time = 0.01;
     let rest_density = 1000.;
     let k = 4.;
-    let mu = 250.;
+    let mu = 3.;
 
     let gravity = -Vec3::unit_y();
     let (tx, rx) = channel::<Vec<Vertex>>();
@@ -102,28 +102,28 @@ fn main() {
                 })
                 .sum::<Vec3>();
 
-            //let force_viscosity = mu
-            //* (0..num_particles)
-            //.map(|j| {
-            //if i == j {
-            //return Vec3::zero();
-            //}
-            //let vdiff = s.velocities[j] - s.velocities[i];
+            let force_viscosity = mu
+                * (0..num_particles)
+                    .map(|j| {
+                        if i == j {
+                            return Vec3::zero();
+                        }
+                        let vdiff = s.velocities[j] - s.velocities[i];
 
-            //let r_ij = s.positions[i] - s.positions[j];
+                        let r_ij = s.positions[i] - s.positions[j];
 
-            //if r_ij.magnitude2() > h * h {
-            //return Vec3::zero();
-            //}
+                        if r_ij.magnitude2() > h * h {
+                            return Vec3::zero();
+                        }
 
-            //mu * s.masses[j] * vdiff / densities[j]
-            //* ViscosityKernel::laplacian(r_ij, h)
-            //})
-            //.sum::<Vec3>();
+                        mu * s.masses[j] * vdiff / densities[j]
+                            * ViscosityKernel::laplacian(r_ij, h)
+                    })
+                    .sum::<Vec3>();
 
             //dbg!(force_viscosity);
             let force_gravity = gravity * densities[i];
-            s.force[i] = force_pressure + force_gravity;
+            s.force[i] = force_pressure + force_viscosity + force_gravity;
         }
 
         for i in 0..num_particles {
@@ -133,6 +133,26 @@ fn main() {
             if s.positions[i].y < -0.01 {
                 s.velocities[i].y *= -0.5;
                 s.positions[i].y = 0.;
+            }
+
+            if s.positions[i].x < -0.03 {
+                s.velocities[i].x *= -0.5;
+                s.positions[i].x = 0.;
+            }
+
+            if s.positions[i].x > 0.53 {
+                s.velocities[i].x *= -0.5;
+                s.positions[i].x = 0.5;
+            }
+
+            if s.positions[i].z < -0.03 {
+                s.velocities[i].z *= -0.5;
+                s.positions[i].z = 0.;
+            }
+
+            if s.positions[i].z > 2. {
+                s.velocities[i].z *= -0.5;
+                s.positions[i].z = 1.99;
             }
 
             let pos = s.positions[i];

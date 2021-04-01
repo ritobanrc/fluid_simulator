@@ -76,11 +76,11 @@ pub struct ViscosityKernel;
 
 impl SmoothingKernel for ViscosityKernel {
     fn laplacian(r: Vec3, h: Scalar) -> Scalar {
-        let c = 45. / (2. * std::f32::consts::PI * h.powi(6));
+        let c = 45. / (std::f32::consts::PI * h.powi(6));
 
-        let mag2 = r.magnitude2();
-        if mag2 <= h * h && mag2 > 0. {
-            c * (h - mag2.sqrt())
+        let mag = r.magnitude();
+        if mag <= h {
+            c * (h - mag)
         } else {
             0.
         }
