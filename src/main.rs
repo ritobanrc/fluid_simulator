@@ -10,6 +10,7 @@ use cgmath::{point3, vec3, Point3, Vector3};
 use num::{Float, FromPrimitive, Zero};
 use rand::Rng;
 use render::Vertex;
+use structopt::StructOpt;
 
 type Scalar = f32;
 type Vec3 = Vector3<Scalar>;
@@ -39,10 +40,23 @@ where
     return (0..num_steps).map(move |i| start + T::from_usize(i).expect("out of range") * delta);
 }
 
+#[derive(StructOpt, Debug)]
+#[structopt(name = "sph_solver")]
+struct Opt {
+    #[structopt(short, long)]
+    window: bool,
+    #[structopt(short, long)]
+    image_dir: Option<std::path::PathBuf>,
+    #[structopt(short, long, default_value = "600")]
+    frames: usize,
+}
+
 fn main() {
     //let num_particles = 1000;
     let mut s = Simulation::default();
     let mut rng = rand::thread_rng();
+
+    let opt = Opt::from_args();
 
     let h = 0.1;
     // Water column scenario
@@ -62,7 +76,7 @@ fn main() {
     let delta_time = 0.01;
     let rest_density = 1000.;
     let k = 4.;
-    let mu = 3.;
+    let mu = 8.;
 
     let gravity = -Vec3::unit_y();
     let (tx, rx) = channel::<Vec<Vertex>>();
@@ -78,8 +92,6 @@ fn main() {
                     .sum(),
             );
         }
-
-        //dbg!(&densities);
 
         for i in 0..num_particles {
             let pressure_i: Scalar = k * (densities[i] - rest_density);
@@ -116,12 +128,10 @@ fn main() {
                             return Vec3::zero();
                         }
 
-                        mu * s.masses[j] * vdiff / densities[j]
-                            * ViscosityKernel::laplacian(r_ij, h)
+                        s.masses[j] * vdiff / densities[j] * ViscosityKernel::laplacian(r_ij, h)
                     })
                     .sum::<Vec3>();
 
-            //dbg!(force_viscosity);
             let force_gravity = gravity * densities[i];
             s.force[i] = force_pressure + force_viscosity + force_gravity;
         }
@@ -166,5 +176,16 @@ fn main() {
         tx.send(verts).unwrap();
     });
 
-    render::open_window(rx).expect("Failed to recieve vertecies");
+    if opt.window {
+        println!("Displaying fluid simulation in window.");
+        render::open_window(rx).expect("Failed to recieve vertecies");
+    } else {
+        if let Some(path) = opt.image_dir {
+            std::fs::create_dir_all(&path).unwrap();
+            render::render_texture(path, rx, 512, 256, opt.frames)
+                .expect("Failed to recieve verticies");
+        } else {
+            eprintln!("Fluid sim is not being displayed or saved anywhere! Did you mean to run with -w or -i?")
+        }
+    }
 }

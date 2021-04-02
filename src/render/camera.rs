@@ -1,5 +1,6 @@
 use cgmath::{Point3, Vector3};
 
+#[derive(Debug)]
 pub struct Camera {
     eye: Point3<f32>,
     target: Point3<f32>,
@@ -31,9 +32,9 @@ impl Camera {
         Self {
             // position the camera one unit up and 2 units back
             // +z is out of the screen
-            eye: (0.0, 1.0, -1.0).into(),
+            eye: (-3., 1.5, 0.).into(),
             // have it look at the origin
-            target: (0.25, 0.5, 0.25).into(),
+            target: (0.25, 0.5, 0.5).into(),
             // which way is "up"
             up: cgmath::Vector3::unit_y(),
             aspect: width as f32 / height as f32,

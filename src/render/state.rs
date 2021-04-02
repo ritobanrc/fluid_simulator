@@ -5,13 +5,25 @@ use wgpu::{
 use winit::event::WindowEvent;
 use winit::window::Window;
 
-/// Contains all of the `wgpu` related state
+pub enum RenderTarget {
+    SwapChain {
+        surface: Surface,
+        sc_desc: SwapChainDescriptor,
+        swap_chain: SwapChain,
+    },
+    Texture {
+        texture: wgpu::Texture,
+        texture_view: wgpu::TextureView,
+        texture_size: winit::dpi::PhysicalSize<u32>,
+        buffer: wgpu::Buffer,
+    },
+}
+
+/// Contains all of the `wgpu` & `winit` related state
 pub struct State {
-    pub surface: Surface,
     pub device: Device,
     pub queue: Queue,
-    pub sc_desc: SwapChainDescriptor,
-    pub swap_chain: SwapChain,
+    pub render_target: RenderTarget,
     pub size: winit::dpi::PhysicalSize<u32>,
     pub render_pipeline: Option<RenderPipeline>,
 }
@@ -20,7 +32,10 @@ fn create_instance() -> Instance {
     Instance::new(wgpu::BackendBit::PRIMARY)
 }
 
-async fn create_surface(instance: &Instance, window: &Window) -> (wgpu::Surface, wgpu::Adapter) {
+async fn create_adapter_with_surface(
+    instance: &Instance,
+    window: &Window,
+) -> (wgpu::Surface, wgpu::Adapter) {
     // SAFETY: I'm not actually sure LMAO, I'm just doing what the docs tell me
     let surface = unsafe { instance.create_surface(window) };
     let adapter = instance
@@ -32,6 +47,16 @@ async fn create_surface(instance: &Instance, window: &Window) -> (wgpu::Surface,
         .unwrap();
 
     (surface, adapter)
+}
+
+async fn crate_adapter(instance: &Instance) -> wgpu::Adapter {
+    instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: Default::default(),
+            compatible_surface: None,
+        })
+        .await
+        .unwrap()
 }
 
 async fn create_device_queue(adapter: &Adapter) -> (Device, Queue) {
@@ -65,7 +90,53 @@ fn create_swapchain(
     (sc_desc, swap_chain)
 }
 
-fn create_render_pipeline(device: &Device, scene: &Scene) -> RenderPipeline {
+fn create_render_texture(
+    texture_size: winit::dpi::PhysicalSize<u32>,
+    device: &Device,
+) -> RenderTarget {
+    let texture_desc = wgpu::TextureDescriptor {
+        size: wgpu::Extent3d {
+            width: texture_size.width,
+            height: texture_size.height,
+            depth: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsage::COPY_SRC | wgpu::TextureUsage::RENDER_ATTACHMENT,
+        label: None,
+    };
+    let texture = device.create_texture(&texture_desc);
+    let texture_view = texture.create_view(&Default::default());
+
+    let u32_size = std::mem::size_of::<u32>() as u32;
+
+    let output_buffer_size =
+        (u32_size * texture_size.width * texture_size.height) as wgpu::BufferAddress;
+    let output_buffer_desc = wgpu::BufferDescriptor {
+        size: output_buffer_size,
+        usage: wgpu::BufferUsage::COPY_DST
+                // this tells wpgu that we want to read this buffer from the cpu
+                | wgpu::BufferUsage::MAP_READ,
+        label: None,
+        mapped_at_creation: false,
+    };
+    let output_buffer = device.create_buffer(&output_buffer_desc);
+
+    RenderTarget::Texture {
+        texture,
+        texture_view,
+        texture_size,
+        buffer: output_buffer,
+    }
+}
+
+fn create_render_pipeline(
+    device: &Device,
+    scene: &Scene,
+    texture_format: wgpu::TextureFormat,
+) -> RenderPipeline {
     let vs_module = device.create_shader_module(&wgpu::include_spirv!("../shader.vert.spv"));
     let fs_module = device.create_shader_module(&wgpu::include_spirv!("../shader.frag.spv"));
 
@@ -88,7 +159,7 @@ fn create_render_pipeline(device: &Device, scene: &Scene) -> RenderPipeline {
             module: &fs_module,
             entry_point: "main",
             targets: &[wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Bgra8UnormSrgb, // NOTE: Don't hardcode this
+                format: texture_format,
                 color_blend: wgpu::BlendState::REPLACE,
                 alpha_blend: wgpu::BlendState::REPLACE,
                 write_mask: wgpu::ColorWrite::ALL,
@@ -114,33 +185,93 @@ fn create_render_pipeline(device: &Device, scene: &Scene) -> RenderPipeline {
 
 impl State {
     // Creating some of the wgpu types requires async code
-    pub async fn new(window: &Window) -> Self {
+    pub async fn from_window(window: &Window) -> Self {
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = create_instance();
-        let (surface, adapter) = create_surface(&instance, window).await;
+        let (surface, adapter) = create_adapter_with_surface(&instance, window).await;
         let (device, queue) = create_device_queue(&adapter).await;
-        let (sc_desc, swap_chain) = create_swapchain(&surface, &device, window.inner_size());
 
-        Self {
+        let (sc_desc, swap_chain) = create_swapchain(&surface, &device, window.inner_size());
+        let render_target = RenderTarget::SwapChain {
             surface,
-            device,
-            queue,
             sc_desc,
             swap_chain,
+        };
+
+        Self {
+            device,
+            queue,
+            render_target,
             size: window.inner_size(),
             render_pipeline: None,
         }
     }
 
+    pub async fn with_texture(width: u32, height: u32) -> Self {
+        // The instance is a handle to our GPU
+        let instance = create_instance();
+        let adapter = crate_adapter(&instance).await;
+        let (device, queue) = create_device_queue(&adapter).await;
+
+        // NOTE: This has nothing to do with winit, its literally just using the
+        // PhysicalSize struct
+        let texture_size = winit::dpi::PhysicalSize::new(width, height);
+        let render_target = create_render_texture(texture_size, &device);
+
+        Self {
+            device,
+            queue,
+            render_target,
+            size: texture_size,
+            render_pipeline: None,
+        }
+    }
+
+    pub fn get_buffer(&self) -> Option<&wgpu::Buffer> {
+        if let RenderTarget::Texture { buffer, .. } = &self.render_target {
+            Some(buffer)
+        } else {
+            None
+        }
+    }
+
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         self.size = new_size;
-        self.sc_desc.width = new_size.width;
-        self.sc_desc.height = new_size.height;
-        self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
+        match &mut self.render_target {
+            RenderTarget::SwapChain {
+                surface,
+                sc_desc,
+                swap_chain,
+            } => {
+                sc_desc.width = new_size.width;
+                sc_desc.height = new_size.height;
+                *swap_chain = self.device.create_swap_chain(&surface, &sc_desc);
+            }
+            RenderTarget::Texture { .. } => {
+                panic!("Cannot resize a texture target.")
+            }
+        }
     }
 
     pub fn input(&mut self, event: &WindowEvent, scene: &mut Scene) -> bool {
+        use winit::event::{KeyboardInput, VirtualKeyCode};
+        match event {
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(keycode),
+                        ..
+                    },
+                ..
+            } => match keycode {
+                VirtualKeyCode::C => {
+                    println!("{:#?}", scene.camera);
+                }
+                _ => {}
+            },
+            _ => {}
+        };
         scene.camera_controller.process_events(event)
     }
 
@@ -158,7 +289,17 @@ impl State {
     }
 
     pub fn render(&mut self, scene: &Scene) -> Result<(), wgpu::SwapChainError> {
-        let frame = self.swap_chain.get_current_frame()?.output;
+        let swap_chain_texture;
+        let frame = match &self.render_target {
+            RenderTarget::SwapChain { swap_chain, .. } => {
+                swap_chain_texture = swap_chain.get_current_frame()?;
+                &swap_chain_texture.output.view
+            }
+            RenderTarget::Texture {
+                ref texture_view, ..
+            } => &texture_view,
+        };
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -168,7 +309,7 @@ impl State {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass Descriptor"),
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &frame.view,
+                attachment: frame,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -184,9 +325,13 @@ impl State {
         });
 
         let device = &self.device;
+        let format = match self.render_target {
+            RenderTarget::SwapChain { .. } => wgpu::TextureFormat::Bgra8UnormSrgb,
+            RenderTarget::Texture { .. } => wgpu::TextureFormat::Rgba8UnormSrgb,
+        };
         let render_pipeline = &self
             .render_pipeline
-            .get_or_insert_with(|| create_render_pipeline(device, scene));
+            .get_or_insert_with(|| create_render_pipeline(device, scene, format));
 
         render_pass.set_pipeline(&render_pipeline);
 
@@ -195,6 +340,36 @@ impl State {
         render_pass.draw(0..scene.num_particles, 0..1);
 
         drop(render_pass);
+
+        if let RenderTarget::Texture {
+            texture,
+            buffer,
+            texture_size,
+            ..
+        } = &self.render_target
+        {
+            let u32_size = std::mem::size_of::<u32>() as u32;
+            encoder.copy_texture_to_buffer(
+                wgpu::TextureCopyView {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                },
+                wgpu::BufferCopyView {
+                    buffer: &buffer,
+                    layout: wgpu::TextureDataLayout {
+                        offset: 0,
+                        bytes_per_row: u32_size * texture_size.width,
+                        rows_per_image: texture_size.height,
+                    },
+                },
+                wgpu::Extent3d {
+                    width: texture_size.width,
+                    height: texture_size.height,
+                    depth: 1,
+                },
+            );
+        }
 
         self.queue.submit(std::iter::once(encoder.finish()));
 
