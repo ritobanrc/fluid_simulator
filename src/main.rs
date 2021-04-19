@@ -1,6 +1,8 @@
+mod grid;
 mod kernels;
 mod render;
 
+use crate::grid::{Coord, Grid};
 use crate::kernels::{Poly6Kernel, SmoothingKernel, SpikyKernel, ViscosityKernel};
 use crate::render::Vertex;
 
@@ -15,21 +17,48 @@ use structopt::StructOpt;
 type Scalar = f32;
 type Vec3 = Vector3<Scalar>;
 
-#[derive(Default)]
 pub struct Simulation {
     pub masses: Vec<Scalar>,
     pub positions: Vec<Point3<Scalar>>,
     pub velocities: Vec<Vec3>,
     pub force: Vec<Vec3>,
+    //pub grid: Grid,
+    pub h: Scalar,
 }
 
 impl Simulation {
+    pub fn new(h: Scalar) -> Self {
+        Simulation {
+            masses: Vec::new(),
+            positions: Vec::new(),
+            velocities: Vec::new(),
+            force: Vec::new(),
+            //grid: Grid::new(
+            //(bounds.x / h) as usize,
+            //(bounds.y / h) as usize,
+            //(bounds.z / h) as usize,
+            //),
+            h,
+        }
+    }
+
+    fn position_to_coord(&self, pos: Vec3) -> Coord {
+        pos.map(|i| (i / self.h) as usize)
+    }
+
+    fn coord(&self, index: usize) -> Coord {
+        self.position_to_coord(self.positions[index].to_vec())
+    }
+
     fn add_particle(&mut self, position: Point3<Scalar>) {
         //let index = self.masses.len();
         self.masses.push(0.125);
         self.positions.push(position);
         self.velocities.push(Zero::zero());
         self.force.push(Zero::zero());
+
+        //self.grid
+        //.add_particle(self.position_to_coord(position.to_vec()), index);
     }
 }
 
@@ -53,13 +82,14 @@ struct Opt {
 }
 
 fn main() {
-    //let num_particles = 1000;
-    let mut s = Simulation::default();
+    //let bounds = vec3(0.6, 1.1, 2.1);
+    let h = 0.1;
+
+    let mut s = Simulation::new(h);
     let mut rng = rand::thread_rng();
 
     let opt = Opt::from_args();
 
-    let h = 0.1;
     // Water column scenario
     for x in linspace(0., 0.5, (0.5 / h) as usize) {
         for y in linspace(0., 1., (1. / h) as usize) {
