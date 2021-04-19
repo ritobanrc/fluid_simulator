@@ -25,7 +25,8 @@ pub struct Simulation {
 
 impl Simulation {
     fn add_particle(&mut self, position: Point3<Scalar>) {
-        self.masses.push(1.0);
+        //let index = self.masses.len();
+        self.masses.push(0.125);
         self.positions.push(position);
         self.velocities.push(Zero::zero());
         self.force.push(Zero::zero());
@@ -95,7 +96,8 @@ fn main() {
 
         for i in 0..num_particles {
             let pressure_i: Scalar = k * (densities[i] - rest_density);
-            //dbg!(pressure_i);
+            //let neighbors = s.grid.get_neighbors(s.coord(i));
+
             let force_pressure = -(0..num_particles)
                 .map(|j| {
                     if i == j {
@@ -138,6 +140,7 @@ fn main() {
 
         for i in 0..num_particles {
             s.velocities[i] = s.velocities[i] + delta_time / densities[i] * s.force[i];
+            //let old_coord = s.coord(i);
             s.positions[i] = s.positions[i] + delta_time * s.velocities[i];
 
             if s.positions[i].y < -0.01 {
@@ -165,6 +168,11 @@ fn main() {
                 s.positions[i].z = 1.99;
             }
 
+            //let new_coord = s.coord(i);
+            //if new_coord != old_coord {
+            //s.grid.update_particle(i, old_coord, new_coord);
+            //}
+
             let pos = s.positions[i];
             let density = densities[i];
             verts.push(Vertex {
@@ -182,7 +190,7 @@ fn main() {
     } else {
         if let Some(path) = opt.image_dir {
             std::fs::create_dir_all(&path).unwrap();
-            render::render_texture(path, rx, 512, 256, opt.frames)
+            render::render_texture(path, rx, 1280, 720, opt.frames)
                 .expect("Failed to recieve verticies");
         } else {
             eprintln!("Fluid sim is not being displayed or saved anywhere! Did you mean to run with -w or -i?")
