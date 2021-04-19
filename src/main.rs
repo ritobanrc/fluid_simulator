@@ -2,6 +2,7 @@ mod kernels;
 mod render;
 
 use crate::kernels::{Poly6Kernel, SmoothingKernel, SpikyKernel, ViscosityKernel};
+use crate::render::Vertex;
 
 use std::sync::mpsc::channel;
 
@@ -9,7 +10,6 @@ use cgmath::prelude::*;
 use cgmath::{point3, vec3, Point3, Vector3};
 use num::{Float, FromPrimitive, Zero};
 use rand::Rng;
-use render::Vertex;
 use structopt::StructOpt;
 
 type Scalar = f32;
@@ -60,9 +60,9 @@ fn main() {
 
     let h = 0.1;
     // Water column scenario
-    for x in linspace(0., 0.5, 5) {
-        for y in linspace(0., 1., 10) {
-            for z in linspace(0., 0.5, 5) {
+    for x in linspace(0., 0.5, (0.5 / h) as usize) {
+        for y in linspace(0., 1., (1. / h) as usize) {
+            for z in linspace(0., 0.5, (0.5 / h) as usize) {
                 let jitter_x = rng.gen::<f32>() * h / 8. - h / 16.;
                 let jitter_z = rng.gen::<f32>() * h / 8. - h / 16.;
                 s.add_particle(point3(x + jitter_x, y, z + jitter_z));

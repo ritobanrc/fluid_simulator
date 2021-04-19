@@ -1,6 +1,8 @@
 use futures::executor::block_on;
 use std::sync::mpsc::{Receiver, RecvError};
+use std::time::Instant;
 use winit::{
+    dpi::PhysicalSize,
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
@@ -22,6 +24,8 @@ pub fn render_texture(
     num_frames: usize,
 ) -> Result<(), RecvError> {
     let mut state = block_on(State::with_texture(width, height));
+
+    let start = Instant::now();
 
     let verticies = rx.recv()?;
     let mut scene = Scene::new(&verticies, &state.device, (width, height));
@@ -48,6 +52,11 @@ pub fn render_texture(
             let mut path = image_dir.clone();
             path.push(format!("frame{:04}.png", i));
             buffer.save(&path).unwrap();
+
+            if i % 20 == 0 {
+                let end = Instant::now();
+                println!("Completed frame {}. Time elapsed: {:?}", i, end - start);
+            }
         });
         state.get_buffer().unwrap().unmap();
     }
@@ -57,7 +66,11 @@ pub fn render_texture(
 
 pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let window = WindowBuilder::new()
+        .with_inner_size(PhysicalSize::new(1280, 720))
+        .with_title("Fluid Simulation")
+        .build(&event_loop)
+        .unwrap();
 
     let mut state = block_on(State::from_window(&window));
 
