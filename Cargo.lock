@@ -1751,6 +1751,7 @@ dependencies = [
  "itertools",
  "num",
  "rand",
+ "rayon",
  "shaderc",
  "smallvec",
  "structopt",

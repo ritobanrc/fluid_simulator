@@ -32,9 +32,9 @@ impl Camera {
         Self {
             // position the camera one unit up and 2 units back
             // +z is out of the screen
-            eye: (-3., 1.5, 0.).into(),
+            eye: (-2., 1., 1.).into(),
             // have it look at the origin
-            target: (0.25, 0.5, 0.5).into(),
+            target: (0.5, 0.5, 1.).into(),
             // which way is "up"
             up: cgmath::Vector3::unit_y(),
             aspect: width as f32 / height as f32,

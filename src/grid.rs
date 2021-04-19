@@ -44,7 +44,16 @@ impl Grid {
     }
 
     pub fn update_particle(&mut self, index: usize, old_coord: Coord, new_coord: Coord) {
-        let old = &mut self[old_coord];
+        let old = match self.get_mut(old_coord) {
+            Some(x) => x,
+            None => {
+                // if we can't find a coord for the `new_coord`, assign it to a random one (the last one)
+                // it'll be a _tiny_ bit more inefficient, but easier than implementing a full solution
+                let idx = self.grid.len() - 1;
+                &mut self.grid[idx]
+            }
+        };
+
         let index_in_coord = old
             .iter()
             .position(|&x| x == index)
@@ -52,7 +61,16 @@ impl Grid {
 
         old.remove(index_in_coord);
 
-        let new = &mut self[new_coord];
+        let new = match self.get_mut(new_coord) {
+            Some(x) => x,
+            None => {
+                // if we can't find a coord for the `new_coord`, assign it to a random one (the last one)
+                // it'll be a _tiny_ bit more inefficient, but easier than implementing a full solution
+                let idx = self.grid.len() - 1;
+                &mut self.grid[idx]
+            }
+        };
+
         new.push(index);
     }
 
@@ -65,7 +83,7 @@ impl Grid {
     }
 
     #[allow(unused)]
-    fn get_mut(&mut self, i: Coord) -> Option<&GridCell> {
+    fn get_mut(&mut self, i: Coord) -> Option<&mut GridCell> {
         if i.x >= self.bounds.x || i.y >= self.bounds.y || i.z >= self.bounds.z {
             return None;
         }

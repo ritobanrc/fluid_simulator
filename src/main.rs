@@ -22,22 +22,22 @@ pub struct Simulation {
     pub positions: Vec<Point3<Scalar>>,
     pub velocities: Vec<Vec3>,
     pub force: Vec<Vec3>,
-    //pub grid: Grid,
+    pub grid: Grid,
     pub h: Scalar,
 }
 
 impl Simulation {
-    pub fn new(h: Scalar) -> Self {
+    pub fn new(h: Scalar, bounds: Vec3) -> Self {
         Simulation {
             masses: Vec::new(),
             positions: Vec::new(),
             velocities: Vec::new(),
             force: Vec::new(),
-            //grid: Grid::new(
-            //(bounds.x / h) as usize,
-            //(bounds.y / h) as usize,
-            //(bounds.z / h) as usize,
-            //),
+            grid: Grid::new(
+                (bounds.x / h) as usize,
+                (bounds.y / h) as usize,
+                (bounds.z / h) as usize,
+            ),
             h,
         }
     }
@@ -51,14 +51,14 @@ impl Simulation {
     }
 
     fn add_particle(&mut self, position: Point3<Scalar>) {
-        //let index = self.masses.len();
-        self.masses.push(0.125);
+        let index = self.masses.len();
+        self.masses.push((10. * self.h).powi(3));
         self.positions.push(position);
         self.velocities.push(Zero::zero());
         self.force.push(Zero::zero());
 
-        //self.grid
-        //.add_particle(self.position_to_coord(position.to_vec()), index);
+        self.grid
+            .add_particle(self.position_to_coord(position.to_vec()), index);
     }
 }
 
@@ -82,10 +82,10 @@ struct Opt {
 }
 
 fn main() {
-    //let bounds = vec3(0.6, 1.1, 2.1);
-    let h = 0.1;
+    let bounds = vec3(0.6, 1.1, 2.1);
+    let h = 0.05;
 
-    let mut s = Simulation::new(h);
+    let mut s = Simulation::new(h, bounds);
     let mut rng = rand::thread_rng();
 
     let opt = Opt::from_args();
@@ -117,8 +117,9 @@ fn main() {
 
         let mut densities: Vec<Scalar> = Vec::with_capacity(num_particles);
         for i in 0..num_particles {
+            let neighbors = s.grid.get_neighbors(s.coord(i));
             densities.push(
-                (0..num_particles)
+                neighbors
                     .map(|j| s.masses[j] * Poly6Kernel::value(s.positions[i] - s.positions[j], h))
                     .sum(),
             );
@@ -126,9 +127,10 @@ fn main() {
 
         for i in 0..num_particles {
             let pressure_i: Scalar = k * (densities[i] - rest_density);
-            //let neighbors = s.grid.get_neighbors(s.coord(i));
+            let neighbors = s.grid.get_neighbors(s.coord(i));
 
-            let force_pressure = -(0..num_particles)
+            let force_pressure = -neighbors
+                .clone()
                 .map(|j| {
                     if i == j {
                         return Vec3::zero();
@@ -147,7 +149,7 @@ fn main() {
                 .sum::<Vec3>();
 
             let force_viscosity = mu
-                * (0..num_particles)
+                * neighbors
                     .map(|j| {
                         if i == j {
                             return Vec3::zero();
@@ -170,7 +172,7 @@ fn main() {
 
         for i in 0..num_particles {
             s.velocities[i] = s.velocities[i] + delta_time / densities[i] * s.force[i];
-            //let old_coord = s.coord(i);
+            let old_coord = s.coord(i);
             s.positions[i] = s.positions[i] + delta_time * s.velocities[i];
 
             if s.positions[i].y < -0.01 {
@@ -198,10 +200,10 @@ fn main() {
                 s.positions[i].z = 1.99;
             }
 
-            //let new_coord = s.coord(i);
-            //if new_coord != old_coord {
-            //s.grid.update_particle(i, old_coord, new_coord);
-            //}
+            let new_coord = s.coord(i);
+            if new_coord != old_coord {
+                s.grid.update_particle(i, old_coord, new_coord);
+            }
 
             let pos = s.positions[i];
             let density = densities[i];
