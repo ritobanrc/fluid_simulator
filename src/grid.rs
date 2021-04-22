@@ -12,7 +12,7 @@ type GridCell = SmallVec<[usize; 2]>;
 pub type Coord = Vector3<usize>;
 
 pub struct Grid {
-    grid: Vec<GridCell>,
+    pub(crate) grid: Vec<GridCell>,
     bounds: Coord,
 }
 
@@ -89,6 +89,10 @@ impl Grid {
         }
         let index = self.coord_to_index(i);
         Some(&mut self.grid[index])
+    }
+
+    pub(crate) fn measure_spilled(&self) -> usize {
+        self.grid.iter().filter(|x| x.spilled()).count()
     }
 }
 

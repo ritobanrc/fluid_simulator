@@ -474,6 +474,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37ab347416e802de484e4d03c7316c48f1ecb56574dfd4a46a80f173ce1de04d"
 
 [[package]]
+name = "fluid_simulator"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "cgmath",
+ "futures",
+ "glob",
+ "image",
+ "itertools",
+ "num",
+ "rand",
+ "rayon",
+ "shaderc",
+ "smallvec",
+ "structopt",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "foreign-types"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1736,27 +1757,6 @@ dependencies = [
  "nix",
  "wayland-client",
  "wayland-protocols",
-]
-
-[[package]]
-name = "sph_solver"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "cgmath",
- "futures",
- "glob",
- "image",
- "itertools",
- "num",
- "rand",
- "rayon",
- "shaderc",
- "smallvec",
- "structopt",
- "wgpu",
- "winit",
 ]
 
 [[package]]

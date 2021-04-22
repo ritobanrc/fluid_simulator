@@ -78,6 +78,9 @@ pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
     let verticies = rx.recv()?;
     let mut scene = Scene::new(&verticies, &state.device, (size.width, size.height));
 
+    let mut last_render_time = std::time::Instant::now();
+    let mut frame_count = 0;
+
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             ref event,
@@ -108,6 +111,14 @@ pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
             }
         },
         Event::RedrawRequested(_) => {
+            let now = std::time::Instant::now();
+            let dt = now - last_render_time;
+            last_render_time = now;
+            frame_count += 1;
+            if frame_count % 100 == 0 {
+                println!("Running at {:?} FPS", 1_000_000 / dt.as_micros())
+            }
+
             let verticies = rx.recv().expect("Failed to recieve verts");
             state.update(&mut scene, &verticies);
             match state.render(&scene) {

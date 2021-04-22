@@ -82,8 +82,8 @@ struct Opt {
 }
 
 fn main() {
-    let bounds = vec3(0.6, 1.1, 2.1);
-    let h = 0.05;
+    let bounds = vec3(0.6, 1.5, 2.1);
+    let h = 0.04;
 
     let mut s = Simulation::new(h, bounds);
     let mut rng = rand::thread_rng();
@@ -103,6 +103,7 @@ fn main() {
 
     let num_particles = s.masses.len();
     println!("Running simulation with {:?} particles", num_particles);
+    println!("Created Grid with {:?} Cells", s.grid.grid.len());
 
     let delta_time = 0.01;
     let rest_density = 1000.;
@@ -206,10 +207,11 @@ fn main() {
             }
 
             let pos = s.positions[i];
-            let density = densities[i];
+            let vel = s.velocities[i].magnitude2();
+            //let color = s.velocities[i].magnitude2();
             verts.push(Vertex {
                 position: [pos.x, pos.y, pos.z],
-                color: [density / 150., 1., density / 150.],
+                color: [vel, vel, 1.],
             });
         }
 
