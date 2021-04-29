@@ -5,6 +5,8 @@ use wgpu::{
 use winit::event::WindowEvent;
 use winit::window::Window;
 
+use std::convert::TryInto;
+
 pub enum RenderTarget {
     SwapChain {
         surface: Surface,
@@ -98,7 +100,7 @@ fn create_render_texture(
         size: wgpu::Extent3d {
             width: texture_size.width,
             height: texture_size.height,
-            depth: 1,
+            depth_or_array_layers: 1,
         },
         mip_level_count: 1,
         sample_count: 1,
@@ -137,8 +139,16 @@ fn create_render_pipeline(
     scene: &Scene,
     texture_format: wgpu::TextureFormat,
 ) -> RenderPipeline {
+    fn dont_validate<'a>(
+        mut desc: wgpu::ShaderModuleDescriptor<'a>,
+    ) -> wgpu::ShaderModuleDescriptor<'a> {
+        desc.flags.remove(wgpu::ShaderFlags::VALIDATION);
+        desc
+    }
+
     let vs_module = device.create_shader_module(&wgpu::include_spirv!("../shader.vert.spv"));
-    let fs_module = device.create_shader_module(&wgpu::include_spirv!("../shader.frag.spv"));
+    let fs_module =
+        device.create_shader_module(&&dont_validate(wgpu::include_spirv!("../shader.frag.spv")));
 
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Render Pipeline Layout"),
@@ -160,17 +170,18 @@ fn create_render_pipeline(
             entry_point: "main",
             targets: &[wgpu::ColorTargetState {
                 format: texture_format,
-                color_blend: wgpu::BlendState::REPLACE,
-                alpha_blend: wgpu::BlendState::REPLACE,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrite::ALL,
             }],
         }),
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::PointList,
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: wgpu::CullMode::Back,
+            cull_mode: None,
             strip_index_format: None,
             polygon_mode: wgpu::PolygonMode::Fill,
+            clamp_depth: false,
+            conservative: false,
         },
         depth_stencil: None,
         multisample: wgpu::MultisampleState {
@@ -308,8 +319,8 @@ impl State {
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass Descriptor"),
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: frame,
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: frame,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -350,23 +361,23 @@ impl State {
         {
             let u32_size = std::mem::size_of::<u32>() as u32;
             encoder.copy_texture_to_buffer(
-                wgpu::TextureCopyView {
+                wgpu::ImageCopyTexture {
                     texture: &texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
                 },
-                wgpu::BufferCopyView {
+                wgpu::ImageCopyBuffer {
                     buffer: &buffer,
-                    layout: wgpu::TextureDataLayout {
+                    layout: wgpu::ImageDataLayout {
                         offset: 0,
-                        bytes_per_row: u32_size * texture_size.width,
-                        rows_per_image: texture_size.height,
+                        bytes_per_row: (u32_size * texture_size.width).try_into().ok(),
+                        rows_per_image: texture_size.height.try_into().ok(),
                     },
                 },
                 wgpu::Extent3d {
                     width: texture_size.width,
                     height: texture_size.height,
-                    depth: 1,
+                    depth_or_array_layers: 1,
                 },
             );
         }

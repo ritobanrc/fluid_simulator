@@ -91,6 +91,7 @@ impl Grid {
         Some(&mut self.grid[index])
     }
 
+    #[allow(dead_code)]
     pub(crate) fn measure_spilled(&self) -> usize {
         self.grid.iter().filter(|x| x.spilled()).count()
     }

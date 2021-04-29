@@ -11,7 +11,7 @@ cgmath = "0.18.0"
 rand = "0.8.3"
 num = "0.3.1"
 winit = "0.22"
-wgpu = "0.7.0"
+wgpu = "0.8.0"
 futures = "0.3"
 bytemuck = { version = "1.5", features = [ "derive" ] }
 structopt = "0.3"
