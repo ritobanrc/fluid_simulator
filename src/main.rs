@@ -1,10 +1,8 @@
-mod grid;
-mod kernels;
 mod render;
+mod sph;
 
-use crate::grid::{Coord, Grid};
-use crate::kernels::{Poly6Kernel, SmoothingKernel, SpikyKernel, ViscosityKernel};
 use crate::render::Vertex;
+use crate::sph::kernels::*;
 
 use std::sync::mpsc::channel;
 
@@ -17,57 +15,32 @@ use structopt::StructOpt;
 type Scalar = f32;
 type Vec3 = Vector3<Scalar>;
 
-pub struct Simulation {
-    pub masses: Vec<Scalar>,
-    pub positions: Vec<Point3<Scalar>>,
-    pub velocities: Vec<Vec3>,
-    pub force: Vec<Vec3>,
-    pub grid: Grid,
-    pub h: Scalar,
-}
-
-impl Simulation {
-    pub fn new(h: Scalar, bounds: Vec3) -> Self {
-        Simulation {
-            masses: Vec::new(),
-            positions: Vec::new(),
-            velocities: Vec::new(),
-            force: Vec::new(),
-            grid: Grid::new(
-                (bounds.x / h) as usize,
-                (bounds.y / h) as usize,
-                (bounds.z / h) as usize,
-            ),
-            h,
-        }
-    }
-
-    fn position_to_coord(&self, pos: Vec3) -> Coord {
-        pos.map(|i| (i / self.h) as usize)
-    }
-
-    fn coord(&self, index: usize) -> Coord {
-        self.position_to_coord(self.positions[index].to_vec())
-    }
-
-    fn add_particle(&mut self, position: Point3<Scalar>) {
-        let index = self.masses.len();
-        self.masses.push((10. * self.h).powi(3));
-        self.positions.push(position);
-        self.velocities.push(Zero::zero());
-        self.force.push(Zero::zero());
-
-        self.grid
-            .add_particle(self.position_to_coord(position.to_vec()), index);
-    }
-}
-
 fn linspace<T>(start: T, stop: T, num_steps: usize) -> impl Iterator<Item = T>
 where
     T: Float + FromPrimitive,
 {
     let delta: T = (stop - start) / T::from_usize(num_steps - 1).expect("out of range");
     return (0..num_steps).map(move |i| start + T::from_usize(i).expect("out of range") * delta);
+}
+
+fn update_bounds(
+    position: &mut Point3<f32>,
+    velocity: &mut Vec3,
+    velocity_damping: Scalar,
+    bounds_min: Vec3,
+    bounds_max: Vec3,
+) {
+    (0..3).for_each(|i| {
+        if position[i] < bounds_min[i] - 0.01 {
+            velocity[i] *= -velocity_damping;
+            position[i] = bounds_min[i];
+        }
+
+        if position[i] > bounds_max[i] + 0.01 {
+            velocity[i] *= -velocity_damping;
+            position[i] = bounds_max[i];
+        }
+    })
 }
 
 #[derive(StructOpt, Debug)]
@@ -82,10 +55,12 @@ struct Opt {
 }
 
 fn main() {
-    let bounds = vec3(0.6, 1.5, 2.1);
+    let bounds = vec3(0.5, 1.5, 2.);
+    let grid_bounds = bounds + vec3(0.1, 0.1, 0.1);
+
     let h = 0.04;
 
-    let mut s = Simulation::new(h, bounds);
+    let mut s = sph::Simulation::new(h, grid_bounds);
     let mut rng = rand::thread_rng();
 
     let opt = Opt::from_args();
@@ -176,30 +151,13 @@ fn main() {
             let old_coord = s.coord(i);
             s.positions[i] = s.positions[i] + delta_time * s.velocities[i];
 
-            if s.positions[i].y < -0.01 {
-                s.velocities[i].y *= -0.5;
-                s.positions[i].y = 0.;
-            }
-
-            if s.positions[i].x < -0.03 {
-                s.velocities[i].x *= -0.5;
-                s.positions[i].x = 0.;
-            }
-
-            if s.positions[i].x > 0.53 {
-                s.velocities[i].x *= -0.5;
-                s.positions[i].x = 0.5;
-            }
-
-            if s.positions[i].z < -0.03 {
-                s.velocities[i].z *= -0.5;
-                s.positions[i].z = 0.;
-            }
-
-            if s.positions[i].z > 2. {
-                s.velocities[i].z *= -0.5;
-                s.positions[i].z = 1.99;
-            }
+            update_bounds(
+                &mut s.positions[i],
+                &mut s.velocities[i],
+                0.8,
+                Vector3::zero(),
+                bounds,
+            );
 
             let new_coord = s.coord(i);
             if new_coord != old_coord {
@@ -211,7 +169,7 @@ fn main() {
             //let color = s.velocities[i].magnitude2();
             verts.push(Vertex {
                 position: [pos.x, pos.y, pos.z],
-                color: [vel, vel, 1.],
+                color: [vel, 0.5 * vel + 0.5, 1.],
             });
         }
 

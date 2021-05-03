@@ -11,6 +11,7 @@ type GridCell = SmallVec<[usize; 2]>;
 /// A 3d Coordinate composed of 3 integers.
 pub type Coord = Vector3<usize>;
 
+/// The Grid structure used to speed up SPH neighbor finding.
 pub struct Grid {
     pub(crate) grid: Vec<GridCell>,
     bounds: Coord,
@@ -44,15 +45,9 @@ impl Grid {
     }
 
     pub fn update_particle(&mut self, index: usize, old_coord: Coord, new_coord: Coord) {
-        let old = match self.get_mut(old_coord) {
-            Some(x) => x,
-            None => {
-                // if we can't find a coord for the `new_coord`, assign it to a random one (the last one)
-                // it'll be a _tiny_ bit more inefficient, but easier than implementing a full solution
-                let idx = self.grid.len() - 1;
-                &mut self.grid[idx]
-            }
-        };
+        let old = self
+            .get_mut(old_coord)
+            .expect("Grid::update_particle old_coord not found");
 
         let index_in_coord = old
             .iter()
@@ -61,15 +56,9 @@ impl Grid {
 
         old.remove(index_in_coord);
 
-        let new = match self.get_mut(new_coord) {
-            Some(x) => x,
-            None => {
-                // if we can't find a coord for the `new_coord`, assign it to a random one (the last one)
-                // it'll be a _tiny_ bit more inefficient, but easier than implementing a full solution
-                let idx = self.grid.len() - 1;
-                &mut self.grid[idx]
-            }
-        };
+        let new = self
+            .get_mut(new_coord)
+            .expect("Griid::update_particle new_coord out of bounds");
 
         new.push(index);
     }
