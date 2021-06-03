@@ -2,12 +2,13 @@ mod mpm;
 mod render;
 mod sph;
 
+use crate::mpm::{MpmParmaters, MpmSimulation};
 use crate::render::Vertex;
 use crate::sph::{SphParamaters, SphSimulation};
 
 use std::sync::mpsc::channel;
 
-use cgmath::{point3, Point3, Vector3};
+use cgmath::{point3, vec3, Point3, Vector3};
 use num::{Float, FromPrimitive};
 use rand::Rng;
 use structopt::StructOpt;
@@ -24,7 +25,7 @@ where
 }
 
 pub(crate) fn update_bounds(
-    position: &mut Point3<f32>,
+    position: &mut Vec3,
     velocity: &mut Vec3,
     velocity_damping: Scalar,
     bounds_min: Vec3,
@@ -59,21 +60,21 @@ trait Simulation {
 }
 
 fn main() {
-    let params = SphParamaters::default();
+    let params = MpmParmaters::default();
     let h = params.h;
 
-    let mut s = SphSimulation::new(params);
+    let mut s = MpmSimulation::new(params);
     let mut rng = rand::thread_rng();
 
     let opt = Opt::from_args();
 
     // Water column scenario
-    for x in linspace(0., 0.5, (0.5 / h) as usize) {
-        for y in linspace(0., 1., (1. / h) as usize) {
-            for z in linspace(0., 0.5, (0.5 / h) as usize) {
+    for x in linspace(0.1, 0.5, (0.5 / h) as usize) {
+        for y in linspace(0.1, 1., (1. / h) as usize) {
+            for z in linspace(0.1, 0.5, (0.5 / h) as usize) {
                 let jitter_x = rng.gen::<f32>() * h / 8. - h / 16.;
                 let jitter_z = rng.gen::<f32>() * h / 8. - h / 16.;
-                s.add_particle(point3(x + jitter_x, y, z + jitter_z));
+                s.add_particle(vec3(x + jitter_x, y, z + jitter_z));
             }
         }
     }
@@ -82,7 +83,7 @@ fn main() {
         "Running simulation with {:?} particles",
         s.params.num_particles
     );
-    println!("Created Grid with {:?} Cells", s.grid.grid.len());
+    //println!("Created Grid with {:?} Cells", s.grid.grid.len());
 
     let (tx, rx) = channel::<Vec<Vertex>>();
 
@@ -95,13 +96,11 @@ fn main() {
     if opt.window {
         println!("Displaying fluid simulation in window.");
         render::open_window(rx).expect("Failed to recieve vertecies");
+    } else if let Some(path) = opt.image_dir {
+        std::fs::create_dir_all(&path).unwrap();
+        render::render_texture(path, rx, 1280, 720, opt.frames)
+            .expect("Failed to recieve verticies");
     } else {
-        if let Some(path) = opt.image_dir {
-            std::fs::create_dir_all(&path).unwrap();
-            render::render_texture(path, rx, 1280, 720, opt.frames)
-                .expect("Failed to recieve verticies");
-        } else {
-            eprintln!("Fluid sim is not being displayed or saved anywhere! Did you mean to run with -w or -i?")
-        }
+        eprintln!("Fluid sim is not being displayed or saved anywhere! Did you mean to run with -w or -i?")
     }
 }

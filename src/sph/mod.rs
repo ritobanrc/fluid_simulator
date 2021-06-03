@@ -2,7 +2,7 @@ pub(crate) mod grid;
 pub(crate) mod kernels;
 
 use cgmath::prelude::*;
-use cgmath::{vec3, Point3, Vector3};
+use cgmath::{vec3, Vector3};
 use grid::{Coord, Grid};
 
 use crate::render::Vertex;
@@ -12,7 +12,7 @@ use kernels::*;
 
 pub struct SphSimulation {
     pub masses: Vec<Scalar>,
-    pub positions: Vec<Point3<Scalar>>,
+    pub positions: Vec<Vec3>,
     pub velocities: Vec<Vec3>,
     pub force: Vec<Vec3>,
     pub grid: Grid,
@@ -41,10 +41,10 @@ impl SphSimulation {
     }
 
     pub(crate) fn coord(&self, index: usize) -> Coord {
-        self.position_to_coord(self.positions[index].to_vec())
+        self.position_to_coord(self.positions[index])
     }
 
-    pub(crate) fn add_particle(&mut self, position: Point3<Scalar>) {
+    pub(crate) fn add_particle(&mut self, position: Vec3) {
         let index = self.masses.len();
         self.masses.push((10. * self.params.h).powi(3));
         self.positions.push(position);
@@ -52,7 +52,7 @@ impl SphSimulation {
         self.force.push(Vector3::zero());
 
         self.grid
-            .add_particle(self.position_to_coord(position.to_vec()), index);
+            .add_particle(self.position_to_coord(position), index);
         self.params.num_particles += 1;
     }
 }
