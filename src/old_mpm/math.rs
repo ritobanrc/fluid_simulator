@@ -1,5 +1,5 @@
 use crate::{Scalar, Vec3};
-use cgmath::{vec3, Array, Matrix3};
+use cgmath::{vec3, Array, Matrix3, Vector3};
 
 /// The kernel function N(x) described in Eqn. (122), pg. 33
 /// MPM SIGGRAPH Course Notes 2016
@@ -61,4 +61,29 @@ pub fn outer(a: Vec3, b: Vec3) -> Matrix3<Scalar> {
         vec3(a.y * b.x, a.y * b.y, a.y * b.z),
         vec3(a.z * b.x, a.z * b.y, a.z * b.z),
     )
+}
+
+use std::ops::RangeInclusive;
+
+pub trait RangeExt {
+    fn contains_point(&self, x: Vec3) -> bool;
+}
+
+impl RangeExt for RangeInclusive<Vec3> {
+    fn contains_point(&self, a: Vec3) -> bool {
+        self.start().x <= a.x
+            && self.start().y <= a.y
+            && self.start().z <= a.z
+            && self.end().x >= a.x
+            && self.end().y >= a.y
+            && self.end().z >= a.z
+    }
+}
+
+pub fn any<T, F: Fn(T) -> bool>(v: Vector3<T>, f: F) -> bool {
+    f(v.x) || f(v.y) || f(v.z)
+}
+
+pub fn all<T, F: Fn(T) -> bool>(v: Vector3<T>, f: F) -> bool {
+    f(v.x) && f(v.y) && f(v.z)
 }
