@@ -2,6 +2,7 @@ mod grid;
 mod parameters;
 mod particles;
 
+use na::Matrix3;
 pub use parameters::MpmParameters;
 
 use nalgebra::Vector3;
@@ -33,16 +34,22 @@ impl MpmSimulation {
     }
 
     /// Adds a particle to the simulation.
-    pub(crate) fn add_particle(&mut self, position: crate::Vec3) {
+    pub(crate) fn add_particle(&mut self, position: [Scalar; 3], velocity: [Scalar; 3]) {
         self.params.num_particles += 1;
 
         // FIXME: Migrate the entire crate over to `nalgebra` so you don't have to deal
         // with crap like this
-        let position = Vec3::new(position.x, position.y, position.z);
-        self.particles.add_particle(position);
+        let position = Vec3::new(position[0], position[1], position[2]);
+        let velocity = Vec3::new(velocity[0], velocity[1], velocity[2]);
+        self.particles.add_particle(position, velocity);
     }
 
     fn particles_to_grid(&mut self) {
+        // NOTE: Because Dp is proportional to the identity matrix (See Course Notes Pg. 42)
+        //       its stored as just a float
+        let Dp = (self.params.h * self.params.h) / 3.;
+        let Dp_inv = 1. / Dp;
+
         for p in 0..self.params.num_particles {
             self.grid
                 .data
@@ -64,8 +71,14 @@ impl MpmSimulation {
                     // Eqn. 172, JSTSS Sigraphh 2016 Course Notes
                     *self.grid.mass_mut(i).unwrap() += self.particles.mass[p] * weight;
                     // Eqn. 128, Course Notes
-                    *self.grid.momentum_mut(i).unwrap() += weight * self.particles.mass[p] * self.particles.velocity[p];
-                    // TODO: Add Affine
+
+                    let mut v_adjusted = self.particles.velocity[p];
+                    if self.params.use_affine {
+                        let xi = self.grid.data.coord_to_pos(i);
+                        let xp = self.particles.position[p];
+                        v_adjusted += self.particles.affine_matrix[p] * Dp_inv * (xi - xp);
+                    }
+                    *self.grid.momentum_mut(i).unwrap() += weight * self.particles.mass[p] * v_adjusted;
                 })
         }
     }
@@ -89,10 +102,30 @@ impl MpmSimulation {
                         return None;
                     }
 
-                    // TODO: Add Affine
                     Some(weight * self.grid.velocity(i).unwrap())
                 })
                 .sum();
+
+            if self.params.use_affine {
+                self.particles.affine_matrix[p] = self
+                    .grid
+                    .data
+                    .particle_grid_iterator(self.particles.position[p])
+                    .filter_map(|(i, weight)| {
+                        if !self.grid.data.coord_in_grid(i) {
+                            eprintln!(
+                        "Particle neighborhood cell out of range. Cell: {:?}, Particle Pos: {:?}",
+                        i, self.particles.position[p]
+                    );
+                            return None;
+                        }
+
+                        let xi = self.grid.data.coord_to_pos(i);
+                        let xp = self.particles.position[p];
+                        Some(weight * self.grid.velocity(i).unwrap() * (xi - xp).transpose())
+                    })
+                    .sum();
+            }
         }
     }
 

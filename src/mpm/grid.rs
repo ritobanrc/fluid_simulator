@@ -129,8 +129,13 @@ impl GridData {
     /// Note that the `bounds` in the returned `GridData` may not be the same as the `bounds` passed into the function, depending on rounding.
     fn new(h: Scalar, bounds: Range<Vec3>) -> GridData {
         let size = (bounds.end - bounds.start) / h;
-        let size = size.map(|x| x.ceil() as usize);
+        let size = size.map(|x| x.ceil() as usize + 1);
         let num_cells = size.iter().product();
+
+        println!(
+            "Using Grid w/ Size: [{}, {}, {}] and {} cells",
+            size.x, size.y, size.z, num_cells
+        );
 
         let actual_bounds = bounds.start + h * size.cast::<Scalar>();
 
@@ -166,6 +171,10 @@ impl GridData {
         }
 
         Ok(coord_usize)
+    }
+
+    pub fn coord_to_pos(&self, coord: Vector3<usize>) -> Vec3 {
+        coord.cast::<Scalar>() * self.h + self.bounds.start
     }
 
     pub fn particle_neighborhood(&self, p: Vec3) -> Range<Vector3<usize>> {

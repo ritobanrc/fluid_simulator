@@ -71,13 +71,19 @@ fn main() {
 
     let opt = Opt::from_args();
 
-    // Water column scenario
+    // Block scenario
     for x in linspace(0.5, 1.5, (1. / h) as usize) {
         for y in linspace(0.5, 1.5, (1. / h) as usize) {
             for z in linspace(0.5, 1.5, (1. / h) as usize) {
                 let jitter_x = rng.gen::<f32>() * h / 8. - h / 16.;
                 let jitter_z = rng.gen::<f32>() * h / 8. - h / 16.;
-                s.add_particle(Vector3::new(x + jitter_x, y, z + jitter_z));
+
+                let velocity = [
+                    rng.gen::<f32>() * 2. - 1.,
+                    rng.gen::<f32>() * 2. - 1.,
+                    rng.gen::<f32>() * 2. - 1.,
+                ];
+                s.add_particle([x + jitter_x, y, z + jitter_z], velocity);
             }
         }
     }
@@ -101,7 +107,7 @@ fn main() {
         render::open_window(rx).expect("Failed to recieve vertecies");
     } else if let Some(path) = opt.image_dir {
         std::fs::create_dir_all(&path).unwrap();
-        render::render_texture(path, rx, 1280, 720, opt.frames)
+        render::render_texture(path, rx, 1920, 1080, opt.frames)
             .expect("Failed to recieve verticies");
     } else {
         eprintln!("Fluid sim is not being displayed or saved anywhere! Did you mean to run with -w or -i?")

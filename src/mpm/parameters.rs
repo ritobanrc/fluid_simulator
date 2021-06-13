@@ -14,6 +14,8 @@ pub struct MpmParameters {
     /// The size of the time step. Larger time steps will simulate faster, but may be unstable or
     /// innaccurate.
     pub delta_time: f32,
+    /// Whether or not to use APIC (as opposed to PIC). TODO: Handle both FLIP and PIC
+    pub use_affine: bool,
 }
 
 impl Default for MpmParameters {
@@ -23,6 +25,7 @@ impl Default for MpmParameters {
             h: 0.05,
             bounds: Vector3::zeros()..Vector3::new(2., 2., 2.),
             delta_time: 0.01,
+            use_affine: true,
         }
     }
 }
