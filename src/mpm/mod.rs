@@ -178,6 +178,8 @@ impl Simulation for MpmSimulation {
         self.grid.compute_forces();
         self.grid.velocity_update(self.params.delta_time);
 
+        //self.update_deformation_gradient();
+
         self.grid_to_particles();
         self.advect_particles();
 
