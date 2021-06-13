@@ -72,9 +72,9 @@ fn main() {
     let opt = Opt::from_args();
 
     // Water column scenario
-    for x in linspace(0.1, 0.5, (0.5 / h) as usize) {
-        for y in linspace(0.1, 1., (1. / h) as usize) {
-            for z in linspace(0.1, 0.5, (0.5 / h) as usize) {
+    for x in linspace(0.5, 1.5, (1. / h) as usize) {
+        for y in linspace(0.5, 1.5, (1. / h) as usize) {
+            for z in linspace(0.5, 1.5, (1. / h) as usize) {
                 let jitter_x = rng.gen::<f32>() * h / 8. - h / 16.;
                 let jitter_z = rng.gen::<f32>() * h / 8. - h / 16.;
                 s.add_particle(Vector3::new(x + jitter_x, y, z + jitter_z));
