@@ -30,10 +30,10 @@ impl MpmParticles {
     pub(crate) fn add_particle(&mut self, position: Vec3, velocity: Vec3) {
         // TODO: Units -- if mass is in kg, this should probably be a lot smaller, like
         // 0.001
-        self.mass.push(1.);
+        self.mass.push(0.1);
         self.position.push(position);
         self.velocity.push(velocity);
-        self.deformation_gradient.push(Matrix3::zeros());
+        self.deformation_gradient.push(Matrix3::identity());
         self.affine_matrix.push(Matrix3::zeros());
     }
 

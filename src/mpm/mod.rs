@@ -129,6 +129,105 @@ impl MpmSimulation {
         }
     }
 
+    fn compute_forces(&mut self) {
+        for i in 0..self.grid.data.num_cells {
+            // Just gravity, for now. Fg = -mg
+            self.grid.force[i] = self.grid.mass[i] * Vec3::new(0., -1., 0.);
+        }
+        // TODO: Add a constitutive model
+        //
+        for p in 0..self.params.num_particles {
+            self.grid
+                .data
+                .clone()
+                .particle_grid_iterator_grad(self.particles.position[p])
+                .for_each(|(i, weight_grad)| {
+                    let initial_volume = 1.0; // TODO: Compute this from a density parameter as described in SSCTS 13
+                    let piola_kirchoff =
+                        self.neo_hookean_piola_kirchoff(self.particles.deformation_gradient[p]);
+
+                    let force_contrib = -1.
+                        * initial_volume
+                        * piola_kirchoff
+                        * self.particles.deformation_gradient[p].transpose()
+                        * weight_grad;
+
+                    if force_contrib.iter().any(|x| x.is_nan()) {
+                        eprintln!("Force Contribution is NaN: {:?}", force_contrib);
+                        eprintln!(
+                            "    Deformation Gradient: {}",
+                            self.particles.deformation_gradient[p]
+                        );
+                        eprintln!("    Piola Kirchoff: {}", piola_kirchoff);
+                    }
+
+                    *self.grid.force_mut(i).unwrap() += force_contrib;
+                });
+        }
+    }
+
+    fn fixed_corotated_piola_kirchoff(
+        &self,
+        deformation_gradient: Matrix3<Scalar>,
+    ) -> Matrix3<Scalar> {
+        return Matrix3::zeros();
+
+        //#![allow(non_snake_case)]
+
+        //let F = deformation_gradient;
+        //let svd = F.svd(true, true);
+        //let R = svd.u.unwrap() * svd.v_t.unwrap();
+        //let J = F.determinant();
+
+        //let (mu, lambda) = self.params.constitutive_model.get_lame_parameters();
+        //2. * mu * (F - R) + lambda * (J - 1.) * J * F.try_inverse().unwrap().transpose()
+    }
+
+    fn neo_hookean_piola_kirchoff(&self, deformation_gradient: Matrix3<Scalar>) -> Matrix3<Scalar> {
+        #![allow(non_snake_case)]
+        let F = deformation_gradient;
+        let J = F.determinant();
+        //if J <= 0.25 {
+        //dbg!("Deformation Gradient Determinant = 0, F = {}", F);
+        //return Matrix3::zeros();
+        //}
+
+        let (mu, lambda) = self.params.constitutive_model.get_lame_parameters();
+
+        let F_inv_trans = F
+            .try_inverse()
+            .expect("Deformation gradient is not invertible")
+            .transpose();
+
+        // TODO: Figure out what base this logarithm is supposed to be
+        let piola_kirchoff = mu * (F - F_inv_trans) + lambda * J.log10() * F_inv_trans;
+
+        if piola_kirchoff.iter().any(|x| x.is_nan()) {
+            eprintln!("Piola Kirchoff is NaN: {:?}", piola_kirchoff);
+            eprintln!("    Deformation Gradient: {:?}", F);
+            eprintln!("    J: {:?}", J);
+            eprintln!("    Lame Parameters: {:?}, {:?}", mu, lambda);
+        }
+
+        piola_kirchoff
+    }
+
+    fn update_deformation_gradient(&mut self) {
+        for p in 0..self.params.num_particles {
+            // Eqn. 181 Course Notes
+            let fact = Matrix3::identity()
+                + self.params.delta_time * {
+                    self.grid
+                        .data
+                        .particle_grid_iterator_grad(self.particles.position[p])
+                        .map(|(i, grad)| self.grid.velocity(i).unwrap() * grad.transpose())
+                        .sum::<Matrix3<Scalar>>()
+                };
+
+            self.particles.deformation_gradient[p] *= fact;
+        }
+    }
+
     fn advect_particles(&mut self) {
         for p in 0..self.params.num_particles {
             self.particles.position[p] += self.params.delta_time * self.particles.velocity[p];
@@ -175,10 +274,10 @@ impl Simulation for MpmSimulation {
         }
 
         self.grid.compute_velocities();
-        self.grid.compute_forces();
+        self.compute_forces();
         self.grid.velocity_update(self.params.delta_time);
 
-        //self.update_deformation_gradient();
+        self.update_deformation_gradient();
 
         self.grid_to_particles();
         self.advect_particles();

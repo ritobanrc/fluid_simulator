@@ -75,14 +75,6 @@ impl MpmGrid {
         }
     }
 
-    pub fn compute_forces(&mut self) {
-        for i in 0..self.data.num_cells {
-            // Just gravity, for now. Fg = -mg
-            self.force[i] = self.mass[i] * Vec3::new(0., -1., 0.);
-            // TODO: Add a constitutive model
-        }
-    }
-
     pub fn velocity_update(&mut self, delta_time: Scalar) {
         for i in 0..self.data.num_cells {
             if self.mass[i] == 0. {
@@ -220,7 +212,7 @@ impl GridData {
         p: Vec3,
     ) -> impl Iterator<Item = (Vector3<usize>, Scalar)> + '_ {
         NeighborhoodIter::new(self.particle_neighborhood(p)).map(move |i| {
-            let grid_pos = i.cast::<Scalar>() * self.h + self.bounds.start;
+            let grid_pos = self.coord_to_pos(i);
 
             // TODO: Migrate entirely to f64 to avoid the casts
             let weight = self.weight((p - grid_pos).cast());
@@ -229,16 +221,32 @@ impl GridData {
         })
     }
 
+    pub fn particle_grid_iterator_grad(
+        &self,
+        p: Vec3,
+    ) -> impl Iterator<Item = (Vector3<usize>, Vec3)> + '_ {
+        NeighborhoodIter::new(self.particle_neighborhood(p)).map(move |i| {
+            let grid_pos = self.coord_to_pos(i);
+
+            // TODO: Migrate entirely to f64 to avoid the casts
+            let weight_grad = self.weight_grad((p - grid_pos).cast());
+
+            (i, weight_grad.cast())
+        })
+    }
+
     fn weight(&self, v: Vector3<f64>) -> f64 {
         v.into_iter().map(|x| kernel(x / self.h as f64)).product()
     }
 
-    fn weight_grad(&self, v: Vector3<f64>) -> Vector3<f64> {
+    fn weight_grad(&self, mut v: Vector3<f64>) -> Vector3<f64> {
         // TODO: Add derivative tests to this
         let mut grad = Vector3::zeros();
+        let one_over_h = 1. / self.h as f64;
+        v *= one_over_h;
 
         for i in 0..3 {
-            grad[i] = 1. / self.h as f64
+            grad[i] = one_over_h
                 * (kernel_derivative(v[i]) * kernel(v[(i + 1) % 3]) * kernel(v[(i + 2) % 3]));
         }
         grad
@@ -432,5 +440,54 @@ mod tests {
     fn test_kernel_derivative() {
         assert!(test_derivative(kernel, kernel_derivative, -2. ..2., 100).is_ok());
         assert!(test_derivative(kernel, |x| 2. * kernel_derivative(x), -2. ..2., 100).is_err());
+    }
+
+    #[test]
+    fn test_weight_gradient() {
+        let h = 1.;
+        let domain = Vector3::repeat(-2. * h)..Vector3::repeat(2. * h);
+        let num_steps = 10;
+
+        // the bounds shouldn't have any effect on the weight or its gradient
+        let grid = GridData::new(h as f32, Vector3::zeros()..Vector3::zeros());
+
+        for y in crate::linspace(domain.start.y, domain.end.y, num_steps) {
+            for z in crate::linspace(domain.start.z, domain.end.z, num_steps) {
+                let result = test_derivative(
+                    |x| grid.weight(Vector3::new(x, y, z)),
+                    |x| grid.weight_grad(Vector3::new(x, y, z)).x,
+                    domain.start.x..domain.end.x,
+                    10,
+                );
+
+                assert!(result.is_ok(), "∂/∂x failed. Error: {:#?}", result);
+            }
+        }
+
+        for x in crate::linspace(domain.start.x, domain.end.x, num_steps) {
+            for z in crate::linspace(domain.start.z, domain.end.z, num_steps) {
+                let result = test_derivative(
+                    |y| grid.weight(Vector3::new(x, y, z)),
+                    |y| grid.weight_grad(Vector3::new(x, y, z)).y,
+                    domain.start.y..domain.end.y,
+                    10,
+                );
+
+                assert!(result.is_ok(), "∂/∂y failed. Error: {:#?}", result);
+            }
+        }
+
+        for x in crate::linspace(domain.start.x, domain.end.x, num_steps) {
+            for y in crate::linspace(domain.start.y, domain.end.y, num_steps) {
+                let result = test_derivative(
+                    |z| grid.weight(Vector3::new(x, y, z)),
+                    |z| grid.weight_grad(Vector3::new(x, y, z)).z,
+                    domain.start.z..domain.end.z,
+                    10,
+                );
+
+                assert!(result.is_ok(), "∂/∂z failed. Error: {:#?}", result);
+            }
+        }
     }
 }

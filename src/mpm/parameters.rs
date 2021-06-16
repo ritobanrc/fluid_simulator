@@ -13,9 +13,11 @@ pub struct MpmParameters {
     pub bounds: Range<Vec3>,
     /// The size of the time step. Larger time steps will simulate faster, but may be unstable or
     /// innaccurate.
-    pub delta_time: f32,
+    pub delta_time: Scalar,
     /// Whether or not to use APIC (as opposed to PIC). TODO: Handle both FLIP and PIC
     pub use_affine: bool,
+    /// Paramters for the Neo-Hookean Constitutive Model. TODO: Add support for other models
+    pub constitutive_model: NeoHookeanParameters,
 }
 
 impl Default for MpmParameters {
@@ -26,6 +28,32 @@ impl Default for MpmParameters {
             bounds: Vector3::zeros()..Vector3::new(2., 2., 2.),
             delta_time: 0.01,
             use_affine: true,
+            constitutive_model: NeoHookeanParameters::default(),
         }
+    }
+}
+
+pub struct NeoHookeanParameters {
+    pub youngs_modulus: Scalar,
+    pub poissons_ratio: Scalar,
+}
+
+impl Default for NeoHookeanParameters {
+    fn default() -> Self {
+        NeoHookeanParameters {
+            youngs_modulus: 1.,
+            poissons_ratio: 0.45,
+        }
+    }
+}
+
+impl NeoHookeanParameters {
+    /// Calculates and returns the lame parametrs mu and lambda
+    pub fn get_lame_parameters(&self) -> (Scalar, Scalar) {
+        let mu = self.youngs_modulus / (2. * (1. + self.poissons_ratio));
+        let lambda = self.youngs_modulus * self.poissons_ratio
+            / ((1. + self.poissons_ratio) * (1. - 2. * self.poissons_ratio));
+
+        (mu, lambda)
     }
 }
