@@ -136,14 +136,15 @@ impl MpmSimulation {
         }
 
         for p in 0..self.params.num_particles {
+            let piola_kirchoff =
+                self.neo_hookean_piola_kirchoff(self.particles.deformation_gradient[p]);
+
             self.grid
                 .data
                 .clone()
                 .particle_grid_iterator_grad(self.particles.position[p])
                 .for_each(|(i, weight_grad)| {
                     let initial_volume = 1.0; // TODO: Compute this from a density parameter as described in SSCTS 13
-                    let piola_kirchoff =
-                        self.neo_hookean_piola_kirchoff(self.particles.deformation_gradient[p]);
 
                     let force_contrib = -1.
                         * initial_volume

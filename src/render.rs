@@ -61,6 +61,13 @@ pub fn render_texture(
         state.get_buffer().unwrap().unmap();
     }
 
+    let end = Instant::now();
+    println!(
+        "Completed simulating {} frames. Time elapsed: {:?}",
+        num_frames,
+        end - start
+    );
+
     Ok(())
 }
 
