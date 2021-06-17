@@ -13,7 +13,7 @@ use std::sync::mpsc::channel;
 use cgmath::{point3, vec3, Point3, Vector3};
 
 use num::{Float, FromPrimitive};
-use rand::Rng;
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use structopt::StructOpt;
 
 type Scalar = f32;
@@ -53,7 +53,7 @@ struct Opt {
     #[structopt(short, long)]
     window: bool,
     #[structopt(short, long)]
-    image_dir: Option<std::path::PathBuf>,
+    output_dir: Option<std::path::PathBuf>,
     #[structopt(short, long, default_value = "600")]
     frames: usize,
 }
@@ -67,7 +67,7 @@ fn main() {
     let h = params.h;
 
     let mut s = MpmSimulation::new(params);
-    let mut rng = rand::thread_rng();
+    let mut rng = StdRng::from_seed([0; 32]);
 
     let opt = Opt::from_args();
 
@@ -92,7 +92,6 @@ fn main() {
         "Running simulation with {:?} particles",
         s.params.num_particles
     );
-    //println!("Created Grid with {:?} Cells", s.grid.grid.len());
 
     let (tx, rx) = channel::<Vec<Vertex>>();
 
@@ -105,7 +104,7 @@ fn main() {
     if opt.window {
         println!("Displaying fluid simulation in window.");
         render::open_window(rx).expect("Failed to recieve vertecies");
-    } else if let Some(path) = opt.image_dir {
+    } else if let Some(path) = opt.output_dir {
         std::fs::create_dir_all(&path).unwrap();
         render::render_texture(path, rx, 1920, 1080, opt.frames)
             .expect("Failed to recieve verticies");

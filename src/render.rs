@@ -53,9 +53,9 @@ pub fn render_texture(
             path.push(format!("frame{:04}.png", i));
             buffer.save(&path).unwrap();
 
-            if i % 20 == 0 {
+            if (i + 1) % 20 == 0 {
                 let end = Instant::now();
-                println!("Completed frame {}. Time elapsed: {:?}", i, end - start);
+                println!("Completed frame {}. Time elapsed: {:?}", i + 1, end - start);
             }
         });
         state.get_buffer().unwrap().unmap();

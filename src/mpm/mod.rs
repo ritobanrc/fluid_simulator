@@ -134,8 +134,7 @@ impl MpmSimulation {
             // Just gravity, for now. Fg = -mg
             self.grid.force[i] = self.grid.mass[i] * Vec3::new(0., -1., 0.);
         }
-        // TODO: Add a constitutive model
-        //
+
         for p in 0..self.params.num_particles {
             self.grid
                 .data
@@ -170,17 +169,15 @@ impl MpmSimulation {
         &self,
         deformation_gradient: Matrix3<Scalar>,
     ) -> Matrix3<Scalar> {
-        return Matrix3::zeros();
+        #![allow(non_snake_case)]
 
-        //#![allow(non_snake_case)]
+        let F = deformation_gradient;
+        let svd = F.svd(true, true);
+        let R = svd.u.unwrap() * svd.v_t.unwrap();
+        let J = F.determinant();
 
-        //let F = deformation_gradient;
-        //let svd = F.svd(true, true);
-        //let R = svd.u.unwrap() * svd.v_t.unwrap();
-        //let J = F.determinant();
-
-        //let (mu, lambda) = self.params.constitutive_model.get_lame_parameters();
-        //2. * mu * (F - R) + lambda * (J - 1.) * J * F.try_inverse().unwrap().transpose()
+        let (mu, lambda) = self.params.constitutive_model.get_lame_parameters();
+        2. * mu * (F - R) + lambda * (J - 1.) * J * F.try_inverse().unwrap().transpose()
     }
 
     fn neo_hookean_piola_kirchoff(&self, deformation_gradient: Matrix3<Scalar>) -> Matrix3<Scalar> {

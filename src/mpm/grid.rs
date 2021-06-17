@@ -240,15 +240,14 @@ impl GridData {
     }
 
     fn weight_grad(&self, mut v: Vector3<f64>) -> Vector3<f64> {
-        // TODO: Add derivative tests to this
-        let mut grad = Vector3::zeros();
         let one_over_h = 1. / self.h as f64;
         v *= one_over_h;
 
-        for i in 0..3 {
-            grad[i] = one_over_h
-                * (kernel_derivative(v[i]) * kernel(v[(i + 1) % 3]) * kernel(v[(i + 2) % 3]));
-        }
+        let k = v.map(kernel);
+        let kd = v.map(kernel_derivative);
+
+        let grad = one_over_h * Vector3::new(kd.x * k.y * k.z, k.x * kd.y * k.z, k.x * k.y * kd.z);
+
         grad
     }
 

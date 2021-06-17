@@ -41,8 +41,8 @@ pub struct NeoHookeanParameters {
 impl Default for NeoHookeanParameters {
     fn default() -> Self {
         NeoHookeanParameters {
-            youngs_modulus: 1.,
-            poissons_ratio: 0.45,
+            youngs_modulus: 3.0,
+            poissons_ratio: 0.1,
         }
     }
 }
