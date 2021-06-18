@@ -47,6 +47,7 @@ impl MpmSimulation {
     fn particles_to_grid(&mut self) {
         // NOTE: Because Dp is proportional to the identity matrix (See Course Notes Pg. 42)
         //       its stored as just a float
+        #![allow(non_snake_case)]
         let Dp = (self.params.h * self.params.h) / 3.;
         let Dp_inv = 1. / Dp;
 
@@ -56,7 +57,7 @@ impl MpmSimulation {
                 .clone() // FIXME: This clone is unnecessary, and just a hack to get around the borrow checker
                 .particle_grid_iterator(self.particles.position[p])
                 .for_each(|(i, weight)| {
-                    if !self.grid.data.coord_in_grid(i) {
+                    if cfg!(debug_assertions) && !self.grid.data.coord_in_grid(i) {
                         // FIXME: This check should not be necessary, ideally,
                         // `particle_grid_iterator` simply should not return grid cells that are
                         // out of bounds. But I'm leaving this in here for now cause debugging
@@ -85,47 +86,33 @@ impl MpmSimulation {
 
     fn grid_to_particles(&mut self) {
         for p in 0..self.params.num_particles {
-            self.particles.velocity[p] = self
+            self.particles.velocity[p] = Vector3::zeros();
+            if self.params.use_affine {
+                self.particles.affine_matrix[p] = Matrix3::zeros();
+            }
+
+            self
                 .grid
                 .data
+                .clone()
                 .particle_grid_iterator(self.particles.position[p])
-                .filter_map(|(i, weight)| {
-                    if !self.grid.data.coord_in_grid(i) {
-                        // FIXME: This check should not be necessary, ideally,
-                        // `particle_grid_iterator` simply should not return grid cells that are
-                        // out of bounds. But I'm leaving this in here for now cause debugging
-                        // boundary issues is a pain
+                .for_each(|(i, weight)| {
+                    if cfg!(debug_assertions) && !self.grid.data.coord_in_grid(i) {
                         eprintln!(
-                        "Particle neighborhood cell out of range. Cell: {:?}, Particle Pos: {:?}",
-                        i, self.particles.position[p]
-                    );
-                        return None;
+                            "Particle neighborhood cell out of range. Cell: {:?}, Particle Pos: {:?}",
+                            i, self.particles.position[p]
+                        );
+                        return;
                     }
 
-                    Some(weight * self.grid.velocity(i).unwrap())
-                })
-                .sum();
+                    self.particles.velocity[p] += weight * self.grid.velocity(i).unwrap();
 
-            if self.params.use_affine {
-                self.particles.affine_matrix[p] = self
-                    .grid
-                    .data
-                    .particle_grid_iterator(self.particles.position[p])
-                    .filter_map(|(i, weight)| {
-                        if !self.grid.data.coord_in_grid(i) {
-                            eprintln!(
-                        "Particle neighborhood cell out of range. Cell: {:?}, Particle Pos: {:?}",
-                        i, self.particles.position[p]
-                    );
-                            return None;
-                        }
-
+                    if self.params.use_affine {
                         let xi = self.grid.data.coord_to_pos(i);
                         let xp = self.particles.position[p];
-                        Some(weight * self.grid.velocity(i).unwrap() * (xi - xp).transpose())
-                    })
-                    .sum();
-            }
+                        self.particles.affine_matrix[p] += weight * self.grid.velocity(i).unwrap() * (xi - xp).transpose();
+                    }
+                });
         }
     }
 
@@ -152,7 +139,7 @@ impl MpmSimulation {
                         * self.particles.deformation_gradient[p].transpose()
                         * weight_grad;
 
-                    if force_contrib.iter().any(|x| x.is_nan()) {
+                    if cfg!(debug_assertions) && force_contrib.iter().any(|x| x.is_nan()) {
                         eprintln!("Force Contribution is NaN: {:?}", force_contrib);
                         eprintln!(
                             "    Deformation Gradient: {}",
@@ -185,10 +172,6 @@ impl MpmSimulation {
         #![allow(non_snake_case)]
         let F = deformation_gradient;
         let J = F.determinant();
-        //if J <= 0.25 {
-        //dbg!("Deformation Gradient Determinant = 0, F = {}", F);
-        //return Matrix3::zeros();
-        //}
 
         let (mu, lambda) = self.params.constitutive_model.get_lame_parameters();
 
@@ -200,7 +183,7 @@ impl MpmSimulation {
         // TODO: Figure out what base this logarithm is supposed to be
         let piola_kirchoff = mu * (F - F_inv_trans) + lambda * J.log10() * F_inv_trans;
 
-        if piola_kirchoff.iter().any(|x| x.is_nan()) {
+        if cfg!(debug_assertions) && piola_kirchoff.iter().any(|x| x.is_nan()) {
             eprintln!("Piola Kirchoff is NaN: {:?}", piola_kirchoff);
             eprintln!("    Deformation Gradient: {:?}", F);
             eprintln!("    J: {:?}", J);

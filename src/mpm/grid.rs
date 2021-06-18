@@ -111,7 +111,7 @@ pub struct GridData {
     /// The grid spacing
     pub h: Scalar,
     //// Reciprocal of the grid spacing, for efficient computation
-    //pub one_over_h: Scalar,
+    pub one_over_h: Scalar,
     /// The bounds of the domain spanned by the grid.
     pub bounds: Range<Vec3>,
 }
@@ -135,34 +135,9 @@ impl GridData {
             num_cells,
             size,
             h,
-            //one_over_h: 1. / h,
+            one_over_h: 1. / h,
             bounds: bounds.start..actual_bounds,
         }
-    }
-
-    /// Converts the position in world space to a grid location. Note that this function does
-    /// not explicitly round, so avoid passing in coordinates that are not exactly on grid locations.
-    fn pos_to_coord(&self, pos: Vec3) -> Result<Vector3<usize>, ParticleGridError> {
-        use num::ToPrimitive;
-        let coord_f32 = (pos - self.bounds.start) / self.h;
-
-        let mut coord_usize = Vector3::zeros();
-
-        for (i, &v) in coord_f32.into_iter().enumerate() {
-            // TODO: Fix this abomination of a function, converting floats to integers
-            // shouldn't be this complicated
-            coord_usize[i] = match v.to_usize() {
-                Some(v) => v,
-                None => {
-                    return Err(ParticleGridError::FloatToUsize {
-                        error: format!("Failed to convert position to coordinate: {:?}", pos),
-                        float: v,
-                    })
-                }
-            };
-        }
-
-        Ok(coord_usize)
     }
 
     pub fn coord_to_pos(&self, coord: Vector3<usize>) -> Vec3 {
@@ -178,7 +153,7 @@ impl GridData {
             self.bounds
         );
 
-        let grid_space_pos = (p - self.bounds.start) / self.h;
+        let grid_space_pos = (p - self.bounds.start) * self.one_over_h;
 
         // usize cast shouldn't panic because of assert above
         // TODO: Implement this for other degree kernel functions.
@@ -236,17 +211,19 @@ impl GridData {
     }
 
     fn weight(&self, v: Vector3<f64>) -> f64 {
-        v.into_iter().map(|x| kernel(x / self.h as f64)).product()
+        v.into_iter()
+            .map(|x| kernel(x * self.one_over_h as f64))
+            .product()
     }
 
     fn weight_grad(&self, mut v: Vector3<f64>) -> Vector3<f64> {
-        let one_over_h = 1. / self.h as f64;
-        v *= one_over_h;
+        v *= self.one_over_h as f64;
 
         let k = v.map(kernel);
         let kd = v.map(kernel_derivative);
 
-        let grad = one_over_h * Vector3::new(kd.x * k.y * k.z, k.x * kd.y * k.z, k.x * k.y * kd.z);
+        let grad = self.one_over_h as f64
+            * Vector3::new(kd.x * k.y * k.z, k.x * kd.y * k.z, k.x * k.y * kd.z);
 
         grad
     }
@@ -259,11 +236,6 @@ impl GridData {
         }
         return true;
     }
-}
-
-#[derive(Debug, Clone)]
-enum ParticleGridError {
-    FloatToUsize { error: String, float: f32 },
 }
 
 trait ContainsPoint {
