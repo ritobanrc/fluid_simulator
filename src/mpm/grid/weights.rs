@@ -27,10 +27,8 @@ impl ParticleGridWeights {
                     let grid_pos = grid.coord_to_pos(coord);
                     let v = pos - grid_pos;
 
-                    let weight = grid.weight(v);
+                    let (weight, grad) = grid.weight_and_gradient(v);
                     self.weights[p][idx] = weight;
-
-                    let grad = grid.weight_grad(v);
                     self.weights_grad[p][idx] = grad;
                 })
         }
@@ -58,50 +56,18 @@ impl ParticleGridWeights {
 }
 
 impl GridData {
-    pub fn particle_grid_iterator(
-        &self,
-        p: Vec3,
-    ) -> impl Iterator<Item = (Vector3<usize>, Scalar)> + '_ {
-        NeighborhoodIter::new(self.particle_neighborhood(p)).map(move |i| {
-            let grid_pos = self.coord_to_pos(i);
-
-            // TODO: Migrate entirely to f64 to avoid the casts
-            let weight = self.weight((p - grid_pos).cast());
-
-            (i, weight)
-        })
-    }
-
-    pub fn particle_grid_iterator_grad(
-        &self,
-        p: Vec3,
-    ) -> impl Iterator<Item = (Vector3<usize>, Vec3)> + '_ {
-        NeighborhoodIter::new(self.particle_neighborhood(p)).map(move |i| {
-            let grid_pos = self.coord_to_pos(i);
-
-            // TODO: Migrate entirely to f64 to avoid the casts
-            let weight_grad = self.weight_grad((p - grid_pos).cast());
-
-            (i, weight_grad.cast())
-        })
-    }
-
-    fn weight(&self, v: Vector3<f64>) -> f64 {
-        v.into_iter()
-            .map(|x| kernel(x * self.one_over_h as f64))
-            .product()
-    }
-
-    fn weight_grad(&self, mut v: Vector3<f64>) -> Vector3<f64> {
-        v *= self.one_over_h as f64;
+    #[inline(always)]
+    fn weight_and_gradient(&self, mut v: Vec3) -> (Scalar, Vec3) {
+        v *= self.one_over_h;
 
         let k = v.map(kernel);
         let kd = v.map(kernel_derivative);
 
+        let weight = k.iter().product();
         let grad = self.one_over_h as f64
             * Vector3::new(kd.x * k.y * k.z, k.x * kd.y * k.z, k.x * k.y * kd.z);
 
-        grad
+        (weight, grad)
     }
 }
 
