@@ -163,7 +163,7 @@ impl MpmSimulation {
         }
 
         for p in 0..self.params.num_particles {
-            let piola_kirchoff = self.fluid_piola_kirchoff(p);
+            let piola_kirchoff = self.neo_hookean_piola_kirchoff(p);
 
             let MpmSimulation {
                 ref particles,
@@ -197,9 +197,9 @@ impl MpmSimulation {
         }
     }
 
-    fn neo_hookean_piola_kirchoff(&self, deformation_gradient: Matrix3<Scalar>) -> Matrix3<Scalar> {
+    fn neo_hookean_piola_kirchoff(&self, p: usize) -> Matrix3<Scalar> {
         #![allow(non_snake_case)]
-        let F = deformation_gradient;
+        let F = self.particles.deformation_gradient[p];
         let J = F.determinant();
 
         let (mu, lambda) = self.params.constitutive_model.get_lame_parameters();
