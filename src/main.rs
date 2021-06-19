@@ -2,19 +2,22 @@ mod mpm;
 mod render;
 mod sph;
 
-use crate::mpm::{MpmParmaters, MpmSimulation};
+extern crate nalgebra as na;
+
+use crate::mpm::{MpmParameters, MpmSimulation};
 use crate::render::Vertex;
 use crate::sph::{SphParamaters, SphSimulation};
 
 use std::sync::mpsc::channel;
 
 use cgmath::{point3, vec3, Point3, Vector3};
+
 use num::{Float, FromPrimitive};
-use rand::Rng;
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use structopt::StructOpt;
 
 type Scalar = f32;
-type Vec3 = Vector3<Scalar>;
+type Vec3 = cgmath::Vector3<Scalar>;
 
 fn linspace<T>(start: T, stop: T, num_steps: usize) -> impl Iterator<Item = T>
 where
@@ -50,7 +53,7 @@ struct Opt {
     #[structopt(short, long)]
     window: bool,
     #[structopt(short, long)]
-    image_dir: Option<std::path::PathBuf>,
+    output_dir: Option<std::path::PathBuf>,
     #[structopt(short, long, default_value = "600")]
     frames: usize,
 }
@@ -60,21 +63,27 @@ trait Simulation {
 }
 
 fn main() {
-    let params = MpmParmaters::default();
+    let params = MpmParameters::default();
     let h = params.h;
 
     let mut s = MpmSimulation::new(params);
-    let mut rng = rand::thread_rng();
+    let mut rng = StdRng::from_seed([0; 32]);
 
     let opt = Opt::from_args();
 
-    // Water column scenario
-    for x in linspace(0.1, 0.5, (0.5 / h) as usize) {
-        for y in linspace(0.1, 1., (1. / h) as usize) {
-            for z in linspace(0.1, 0.5, (0.5 / h) as usize) {
-                let jitter_x = rng.gen::<f32>() * h / 8. - h / 16.;
-                let jitter_z = rng.gen::<f32>() * h / 8. - h / 16.;
-                s.add_particle(vec3(x + jitter_x, y, z + jitter_z));
+    // Block scenario
+    for x in linspace(0.5, 1.5, (1. / h) as usize) {
+        for y in linspace(0.5, 1.5, (1. / h) as usize) {
+            for z in linspace(0.5, 1.5, (1. / h) as usize) {
+                let jitter_x = rng.gen::<f64>() * h / 8. - h / 16.;
+                let jitter_z = rng.gen::<f64>() * h / 8. - h / 16.;
+
+                let velocity = [0., 0., 0.];
+                //rng.gen::<f64>() * 2. - 1.,
+                //rng.gen::<f64>() * 2. - 1.,
+                //rng.gen::<f64>() * 2. - 1.,
+                //];
+                s.add_particle([x + jitter_x, y, z + jitter_z], velocity);
             }
         }
     }
@@ -83,7 +92,6 @@ fn main() {
         "Running simulation with {:?} particles",
         s.params.num_particles
     );
-    //println!("Created Grid with {:?} Cells", s.grid.grid.len());
 
     let (tx, rx) = channel::<Vec<Vertex>>();
 
@@ -96,9 +104,9 @@ fn main() {
     if opt.window {
         println!("Displaying fluid simulation in window.");
         render::open_window(rx).expect("Failed to recieve vertecies");
-    } else if let Some(path) = opt.image_dir {
+    } else if let Some(path) = opt.output_dir {
         std::fs::create_dir_all(&path).unwrap();
-        render::render_texture(path, rx, 1280, 720, opt.frames)
+        render::render_texture(path, rx, 1920, 1080, opt.frames)
             .expect("Failed to recieve verticies");
     } else {
         eprintln!("Fluid sim is not being displayed or saved anywhere! Did you mean to run with -w or -i?")
