@@ -3,6 +3,60 @@ use super::{MpmParameters, Scalar, Vec3};
 use na::Vector3;
 use std::ops::Range;
 
+#[derive(Default)]
+pub struct ParticleGridWeights {
+    coords: Vec<[Vector3<usize>; 64]>,
+    weights: Vec<[f64; 64]>,
+    weights_grad: Vec<[Vector3<f64>; 64]>,
+}
+
+impl ParticleGridWeights {
+    pub fn add_particle(&mut self) {
+        self.coords.push([Vector3::zeros(); 64]);
+        self.weights.push([0.; 64]);
+        self.weights_grad.push([Vector3::zeros(); 64]);
+    }
+
+    pub fn precompute(&mut self, grid: &GridData, positions: &[Vec3]) {
+        for (p, &pos) in positions.iter().enumerate() {
+            NeighborhoodIter::new(grid.particle_neighborhood(pos))
+                .enumerate()
+                .for_each(|(idx, coord)| {
+                    self.coords[p][idx] = coord;
+
+                    let grid_pos = grid.coord_to_pos(coord);
+                    let v = pos - grid_pos;
+
+                    let weight = grid.weight(v);
+                    self.weights[p][idx] = weight;
+
+                    let grad = grid.weight_grad(v);
+                    self.weights_grad[p][idx] = grad;
+                })
+        }
+    }
+
+    pub fn particle_grid_iterator(
+        &self,
+        p: usize,
+    ) -> impl Iterator<Item = (Vector3<usize>, f64)> + '_ {
+        self.coords[p]
+            .iter()
+            .copied()
+            .zip(self.weights[p].iter().copied())
+    }
+
+    pub fn particle_grid_iterator_grad(
+        &self,
+        p: usize,
+    ) -> impl Iterator<Item = (Vector3<usize>, Vector3<f64>)> + '_ {
+        self.coords[p]
+            .iter()
+            .copied()
+            .zip(self.weights_grad[p].iter().copied())
+    }
+}
+
 impl GridData {
     pub fn particle_grid_iterator(
         &self,
@@ -14,7 +68,7 @@ impl GridData {
             // TODO: Migrate entirely to f64 to avoid the casts
             let weight = self.weight((p - grid_pos).cast());
 
-            (i, weight as f32)
+            (i, weight)
         })
     }
 

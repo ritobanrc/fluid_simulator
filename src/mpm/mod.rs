@@ -13,7 +13,9 @@ use crate::Simulation;
 use grid::MpmGrid;
 use particles::MpmParticles;
 
-type Scalar = f32;
+use self::grid::weights::ParticleGridWeights;
+
+type Scalar = f64;
 type Vec3 = Vector3<Scalar>;
 
 /// Contains all of the state for the Material Point Method Simulation
@@ -21,6 +23,7 @@ pub struct MpmSimulation {
     pub particles: MpmParticles,
     pub grid: MpmGrid,
     pub params: MpmParameters,
+    pub weights: ParticleGridWeights,
 }
 
 impl MpmSimulation {
@@ -30,6 +33,7 @@ impl MpmSimulation {
             particles: MpmParticles::default(),
             grid: MpmGrid::new(&params),
             params,
+            weights: ParticleGridWeights::default(),
         }
     }
 
@@ -42,6 +46,12 @@ impl MpmSimulation {
         let position = Vec3::new(position[0], position[1], position[2]);
         let velocity = Vec3::new(velocity[0], velocity[1], velocity[2]);
         self.particles.add_particle(position, velocity);
+        self.weights.add_particle();
+    }
+
+    fn precompute_weights(&mut self) {
+        self.weights
+            .precompute(&self.grid.data, &self.particles.position);
     }
 
     fn particles_to_grid(&mut self) {
@@ -51,68 +61,78 @@ impl MpmSimulation {
         let Dp = (self.params.h * self.params.h) / 3.;
         let Dp_inv = 1. / Dp;
 
+        // Destructure `self` into its constituent parts because the borrow checker
+        // isn't smart enough to figure out that we should be able to access these fields
+        // simultaneously
+        let MpmSimulation {
+            ref particles,
+            ref mut grid,
+            ref weights,
+            ref params,
+        } = self;
+
         for p in 0..self.params.num_particles {
-            self.grid
-                .data
-                .clone() // FIXME: This clone is unnecessary, and just a hack to get around the borrow checker
-                .particle_grid_iterator(self.particles.position[p])
-                .for_each(|(i, weight)| {
-                    if cfg!(debug_assertions) && !self.grid.data.coord_in_grid(i) {
-                        // FIXME: This check should not be necessary, ideally,
-                        // `particle_grid_iterator` simply should not return grid cells that are
-                        // out of bounds. But I'm leaving this in here for now cause debugging
-                        // boundary issues is a pain
-                        eprintln!(
-                            "Particle neighborhood cell out of range. Cell: {:?}, Particle Pos: {:?}",
-                            i, self.particles.position[p]
-                        );
-                        return;
-                    }
+            weights.particle_grid_iterator(p).for_each(|(i, weight)| {
+                if cfg!(debug_assertions) && !grid.data.coord_in_grid(i) {
+                    // FIXME: This check should not be necessary, ideally,
+                    // `particle_grid_iterator` simply should not return grid cells that are
+                    // out of bounds. But I'm leaving this in here for now cause debugging
+                    // boundary issues is a pain
+                    eprintln!(
+                        "Particle neighborhood cell out of range. Cell: {:?}, Particle Pos: {:?}",
+                        i, particles.position[p]
+                    );
+                    return;
+                }
 
-                    // Eqn. 172, JSTSS Sigraphh 2016 Course Notes
-                    *self.grid.mass_mut(i).unwrap() += self.particles.mass[p] * weight;
-                    // Eqn. 128, Course Notes
+                // Eqn. 172, JSTSS Sigraphh 2016 Course Notes
+                *grid.mass_mut(i).unwrap() += particles.mass[p] * weight;
 
-                    let mut v_adjusted = self.particles.velocity[p];
-                    if self.params.use_affine {
-                        let xi = self.grid.data.coord_to_pos(i);
-                        let xp = self.particles.position[p];
-                        v_adjusted += self.particles.affine_matrix[p] * Dp_inv * (xi - xp);
-                    }
-                    *self.grid.momentum_mut(i).unwrap() += weight * self.particles.mass[p] * v_adjusted;
-                })
+                // Eqn. 128, Course Notes
+                let mut v_adjusted = particles.velocity[p];
+                if params.use_affine {
+                    let xi = grid.data.coord_to_pos(i);
+                    let xp = particles.position[p];
+                    v_adjusted += particles.affine_matrix[p] * Dp_inv * (xi - xp);
+                }
+
+                *grid.momentum_mut(i).unwrap() += weight * particles.mass[p] * v_adjusted;
+            })
         }
     }
 
     fn grid_to_particles(&mut self) {
-        for p in 0..self.params.num_particles {
-            self.particles.velocity[p] = Vector3::zeros();
-            if self.params.use_affine {
-                self.particles.affine_matrix[p] = Matrix3::zeros();
+        let MpmSimulation {
+            ref mut particles,
+            ref grid,
+            ref weights,
+            ref params,
+        } = self;
+
+        for p in 0..params.num_particles {
+            particles.velocity[p] = Vector3::zeros();
+            if params.use_affine {
+                particles.affine_matrix[p] = Matrix3::zeros();
             }
 
-            self
-                .grid
-                .data
-                .clone()
-                .particle_grid_iterator(self.particles.position[p])
-                .for_each(|(i, weight)| {
-                    if cfg!(debug_assertions) && !self.grid.data.coord_in_grid(i) {
-                        eprintln!(
-                            "Particle neighborhood cell out of range. Cell: {:?}, Particle Pos: {:?}",
-                            i, self.particles.position[p]
-                        );
-                        return;
-                    }
+            weights.particle_grid_iterator(p).for_each(|(i, weight)| {
+                if cfg!(debug_assertions) && !grid.data.coord_in_grid(i) {
+                    eprintln!(
+                        "Particle neighborhood cell out of range. Cell: {:?}, Particle Pos: {:?}",
+                        i, particles.position[p]
+                    );
+                    return;
+                }
 
-                    self.particles.velocity[p] += weight * self.grid.velocity(i).unwrap();
+                particles.velocity[p] += weight * grid.velocity(i).unwrap();
 
-                    if self.params.use_affine {
-                        let xi = self.grid.data.coord_to_pos(i);
-                        let xp = self.particles.position[p];
-                        self.particles.affine_matrix[p] += weight * self.grid.velocity(i).unwrap() * (xi - xp).transpose();
-                    }
-                });
+                if params.use_affine {
+                    let xi = grid.data.coord_to_pos(i);
+                    let xp = particles.position[p];
+                    particles.affine_matrix[p] +=
+                        weight * grid.velocity(i).unwrap() * (xi - xp).transpose();
+                }
+            });
         }
     }
 
@@ -126,46 +146,36 @@ impl MpmSimulation {
             let piola_kirchoff =
                 self.neo_hookean_piola_kirchoff(self.particles.deformation_gradient[p]);
 
-            self.grid
-                .data
-                .clone()
-                .particle_grid_iterator_grad(self.particles.position[p])
+            let MpmSimulation {
+                ref particles,
+                ref mut grid,
+                ref weights,
+                params: _,
+            } = self;
+
+            weights
+                .particle_grid_iterator_grad(p)
                 .for_each(|(i, weight_grad)| {
                     let initial_volume = 1.0; // TODO: Compute this from a density parameter as described in SSCTS 13
 
                     let force_contrib = -1.
                         * initial_volume
                         * piola_kirchoff
-                        * self.particles.deformation_gradient[p].transpose()
+                        * particles.deformation_gradient[p].transpose()
                         * weight_grad;
 
                     if cfg!(debug_assertions) && force_contrib.iter().any(|x| x.is_nan()) {
                         eprintln!("Force Contribution is NaN: {:?}", force_contrib);
                         eprintln!(
                             "    Deformation Gradient: {}",
-                            self.particles.deformation_gradient[p]
+                            particles.deformation_gradient[p]
                         );
                         eprintln!("    Piola Kirchoff: {}", piola_kirchoff);
                     }
 
-                    *self.grid.force_mut(i).unwrap() += force_contrib;
+                    *grid.force_mut(i).unwrap() += force_contrib;
                 });
         }
-    }
-
-    fn fixed_corotated_piola_kirchoff(
-        &self,
-        deformation_gradient: Matrix3<Scalar>,
-    ) -> Matrix3<Scalar> {
-        #![allow(non_snake_case)]
-
-        let F = deformation_gradient;
-        let svd = F.svd(true, true);
-        let R = svd.u.unwrap() * svd.v_t.unwrap();
-        let J = F.determinant();
-
-        let (mu, lambda) = self.params.constitutive_model.get_lame_parameters();
-        2. * mu * (F - R) + lambda * (J - 1.) * J * F.try_inverse().unwrap().transpose()
     }
 
     fn neo_hookean_piola_kirchoff(&self, deformation_gradient: Matrix3<Scalar>) -> Matrix3<Scalar> {
@@ -198,9 +208,8 @@ impl MpmSimulation {
             // Eqn. 181 Course Notes
             let fact = Matrix3::identity()
                 + self.params.delta_time * {
-                    self.grid
-                        .data
-                        .particle_grid_iterator_grad(self.particles.position[p])
+                    self.weights
+                        .particle_grid_iterator_grad(p)
                         .map(|(i, grad)| self.grid.velocity(i).unwrap() * grad.transpose())
                         .sum::<Matrix3<Scalar>>()
                 };
@@ -238,6 +247,8 @@ pub(crate) fn update_bounds(position: &mut Vec3, bounds_min: Vec3, bounds_max: V
 impl Simulation for MpmSimulation {
     fn simulate_frame(&mut self) -> Vec<Vertex> {
         self.grid.clear_grid();
+        self.precompute_weights();
+
         self.particles_to_grid();
 
         if cfg!(debug_assertions) {
@@ -276,7 +287,8 @@ impl MpmSimulation {
             .iter()
             .zip(self.particles.velocity.iter())
             .map(|(pos, vel)| {
-                let vel = vel.magnitude_squared();
+                let pos = pos.cast();
+                let vel = vel.magnitude_squared() as f32;
                 Vertex {
                     position: [pos.x, pos.y, pos.z],
                     color: [vel, 0.5 * vel + 0.5, 1.],

@@ -1,8 +1,6 @@
+use super::{Scalar, Vec3};
 use nalgebra::Vector3;
 use std::ops::Range;
-
-type Scalar = f32;
-type Vec3 = Vector3<Scalar>;
 
 pub struct MpmParameters {
     /// The total number of Lagrangian particles in the simulation

@@ -42,6 +42,7 @@ impl GridData {
         }
     }
 
+    #[inline(always)]
     pub fn coord_to_pos(&self, coord: Vector3<usize>) -> Vec3 {
         coord.cast::<Scalar>() * self.h + self.bounds.start
     }

@@ -75,8 +75,8 @@ fn main() {
     for x in linspace(0.5, 1.5, (1. / h) as usize) {
         for y in linspace(0.5, 1.5, (1. / h) as usize) {
             for z in linspace(0.5, 1.5, (1. / h) as usize) {
-                let jitter_x = rng.gen::<f32>() * h / 8. - h / 16.;
-                let jitter_z = rng.gen::<f32>() * h / 8. - h / 16.;
+                let jitter_x = rng.gen::<f64>() * h / 8. - h / 16.;
+                let jitter_z = rng.gen::<f64>() * h / 8. - h / 16.;
 
                 let velocity = [0., 0., 0.];
                 //rng.gen::<f32>() * 2. - 1.,

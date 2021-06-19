@@ -1,5 +1,5 @@
 mod data;
-mod particle_grid_weights;
+pub mod weights;
 
 use na::Vector3;
 
