@@ -136,6 +136,26 @@ impl MpmSimulation {
         }
     }
 
+    fn calculate_initial_volumes(&mut self) {
+        let h3 = self.params.h * self.params.h * self.params.h;
+
+        self.particles
+            .initial_volume
+            .reserve(self.params.num_particles);
+
+        for p in 0..self.params.num_particles {
+            let density: Scalar = self
+                .weights
+                .particle_grid_iterator(p)
+                .map(|(i, weight)| self.grid.mass(i).unwrap() * weight / h3)
+                .sum();
+
+            self.particles
+                .initial_volume
+                .push(self.particles.mass[p] / density);
+        }
+    }
+
     fn compute_forces(&mut self) {
         for i in 0..self.grid.data.num_cells {
             // Just gravity, for now. Fg = -mg
@@ -143,8 +163,7 @@ impl MpmSimulation {
         }
 
         for p in 0..self.params.num_particles {
-            let piola_kirchoff =
-                self.neo_hookean_piola_kirchoff(self.particles.deformation_gradient[p]);
+            let piola_kirchoff = self.fluid_piola_kirchoff(p);
 
             let MpmSimulation {
                 ref particles,
@@ -156,7 +175,7 @@ impl MpmSimulation {
             weights
                 .particle_grid_iterator_grad(p)
                 .for_each(|(i, weight_grad)| {
-                    let initial_volume = 1.0; // TODO: Compute this from a density parameter as described in SSCTS 13
+                    let initial_volume = particles.initial_volume[p];
 
                     let force_contrib = -1.
                         * initial_volume
@@ -199,6 +218,30 @@ impl MpmSimulation {
             eprintln!("    J: {:?}", J);
             eprintln!("    Lame Parameters: {:?}, {:?}", mu, lambda);
         }
+
+        piola_kirchoff
+    }
+
+    fn fluid_piola_kirchoff(&self, p: usize) -> Matrix3<Scalar> {
+        #![allow(non_snake_case)]
+        let k = 4.;
+        let rest_density = 500.; // TODO: Units
+
+        let deformation_gradient = self.particles.deformation_gradient[p];
+        let J = deformation_gradient.determinant();
+        let initial_volume = self.particles.initial_volume[p];
+
+        let volume = J * initial_volume;
+        let density = self.particles.mass[p] / volume;
+
+        let pressure = k * (density - rest_density);
+
+        let cauchy_stress = Matrix3::from_diagonal_element(-pressure);
+        let F_inv_trans = deformation_gradient
+            .try_inverse()
+            .expect("Deformation gradient is not invertible")
+            .transpose();
+        let piola_kirchoff = J * cauchy_stress * F_inv_trans;
 
         piola_kirchoff
     }
@@ -250,6 +293,10 @@ impl Simulation for MpmSimulation {
         self.precompute_weights();
 
         self.particles_to_grid();
+
+        if self.particles.initial_volume.is_empty() {
+            self.calculate_initial_volumes();
+        }
 
         if cfg!(debug_assertions) {
             println!(

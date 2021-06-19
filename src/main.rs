@@ -79,9 +79,9 @@ fn main() {
                 let jitter_z = rng.gen::<f64>() * h / 8. - h / 16.;
 
                 let velocity = [0., 0., 0.];
-                //rng.gen::<f32>() * 2. - 1.,
-                //rng.gen::<f32>() * 2. - 1.,
-                //rng.gen::<f32>() * 2. - 1.,
+                //rng.gen::<f64>() * 2. - 1.,
+                //rng.gen::<f64>() * 2. - 1.,
+                //rng.gen::<f64>() * 2. - 1.,
                 //];
                 s.add_particle([x + jitter_x, y, z + jitter_z], velocity);
             }

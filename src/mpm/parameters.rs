@@ -25,7 +25,7 @@ impl Default for MpmParameters {
             h: 0.05,
             bounds: Vector3::zeros()..Vector3::new(2., 2., 2.),
             delta_time: 0.01,
-            use_affine: true,
+            use_affine: false,
             constitutive_model: NeoHookeanParameters::default(),
         }
     }

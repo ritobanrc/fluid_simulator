@@ -64,8 +64,8 @@ impl GridData {
         let kd = v.map(kernel_derivative);
 
         let weight = k.iter().product();
-        let grad = self.one_over_h as f64
-            * Vector3::new(kd.x * k.y * k.z, k.x * kd.y * k.z, k.x * k.y * kd.z);
+        let grad =
+            self.one_over_h * Vector3::new(kd.x * k.y * k.z, k.x * kd.y * k.z, k.x * k.y * kd.z);
 
         (weight, grad)
     }
