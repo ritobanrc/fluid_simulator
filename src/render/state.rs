@@ -187,7 +187,7 @@ fn create_render_pipeline(
         multisample: wgpu::MultisampleState {
             count: 1,
             mask: !0,
-            alpha_to_coverage_enabled: true,
+            alpha_to_coverage_enabled: false,
         },
     });
 
@@ -299,7 +299,11 @@ impl State {
             .write_buffer(&scene.vertex_buffer, 0, bytemuck::cast_slice(verts));
     }
 
-    pub fn render(&mut self, scene: &Scene) -> Result<(), wgpu::SwapChainError> {
+    pub fn render(
+        &mut self,
+        scene: &Scene,
+        egui_state: Option<crate::render::EguiState>,
+    ) -> Result<(), wgpu::SwapChainError> {
         let swap_chain_texture;
         let frame = match &self.render_target {
             RenderTarget::SwapChain { swap_chain, .. } => {
@@ -351,6 +355,31 @@ impl State {
         render_pass.draw(0..scene.num_particles, 0..1);
 
         drop(render_pass);
+
+        if let Some(egui_state) = egui_state {
+            egui_state.render_pass.update_texture(
+                &self.device,
+                &self.queue,
+                &egui_state.platform.context().texture(),
+            );
+            egui_state
+                .render_pass
+                .update_user_textures(&self.device, &self.queue);
+            egui_state.render_pass.update_buffers(
+                &mut self.device,
+                &mut self.queue,
+                &egui_state.paint_jobs,
+                &egui_state.screen_descriptor,
+            );
+
+            egui_state.render_pass.execute(
+                &mut encoder,
+                &frame,
+                &egui_state.paint_jobs,
+                &egui_state.screen_descriptor,
+                None,
+            );
+        }
 
         if let RenderTarget::Texture {
             texture,

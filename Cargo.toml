@@ -10,7 +10,7 @@ edition = "2018"
 cgmath = "0.18.0"
 rand = "0.8.3"
 num = "0.3.1"
-winit = "0.22"
+winit = "0.25"
 wgpu = "0.8.0"
 futures = "0.3"
 bytemuck = { version = "1.5", features = [ "derive" ] }
@@ -20,6 +20,11 @@ smallvec = "1.6.1"
 itertools = "0.10.0"
 rayon = "1.5.0"
 nalgebra = "0.27.1"
+
+egui = "0.12.0"
+epi = "0.12.0"
+egui_wgpu_backend = "0.8.0"
+egui_winit_platform = "0.8.0"
 
 [build-dependencies]
 anyhow = "1.0"
