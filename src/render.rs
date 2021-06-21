@@ -118,6 +118,8 @@ pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
     let repaint_signal = std::sync::Arc::new(RepaintSignal(std::sync::Mutex::new(
         event_loop.create_proxy(),
     )));
+
+    let mut ui_state = UIState::default();
     // -------------------------------------------
 
     let size = window.inner_size();
@@ -188,12 +190,12 @@ pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
                 }
                 .build();
 
-                egui_update(platform.context(), &mut frame);
+                ui_state.egui_update(platform.context(), &mut frame);
 
                 let (_output, paint_commands) = platform.end_frame();
                 let paint_jobs = platform.context().tessellate(paint_commands);
 
-                let egui_state = EguiState {
+                let egui_state = EguiRenderState {
                     platform: &platform,
                     render_pass: &mut egui_render_pass,
                     paint_jobs: &paint_jobs,
@@ -228,14 +230,32 @@ pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
     });
 }
 
-fn egui_update(ctx: egui::CtxRef, _frame: &mut epi::Frame) {
-    egui::Window::new("My Window").show(&ctx, |ui| {
-        ui.label("Hello World!");
-    });
+#[derive(Default)]
+pub struct UIState {
+    counter: i32,
+}
+
+impl UIState {
+    fn egui_update(&mut self, ctx: egui::CtxRef, _frame: &mut epi::Frame) {
+        egui::Window::new("My Window").show(&ctx, |ui| {
+            ui.label("Hello World!");
+            //
+            // Put the buttons and label on the same row:
+            ui.horizontal(|ui| {
+                if ui.button("-").clicked() {
+                    self.counter -= 1;
+                }
+                ui.label(self.counter.to_string());
+                if ui.button("+").clicked() {
+                    self.counter += 1;
+                }
+            });
+        });
+    }
 }
 
 /// The Egui-associated state that `State::render` needs
-pub struct EguiState<'a> {
+pub struct EguiRenderState<'a> {
     platform: &'a egui_winit_platform::Platform,
     render_pass: &'a mut egui_wgpu_backend::RenderPass,
     paint_jobs: &'a [egui::ClippedMesh],

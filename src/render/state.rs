@@ -302,7 +302,7 @@ impl State {
     pub fn render(
         &mut self,
         scene: &Scene,
-        egui_state: Option<crate::render::EguiState>,
+        egui_state: Option<crate::render::EguiRenderState>,
     ) -> Result<(), wgpu::SwapChainError> {
         let swap_chain_texture;
         let frame = match &self.render_target {
