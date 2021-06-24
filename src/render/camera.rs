@@ -1,4 +1,4 @@
-use cgmath::{Point3, Vector3};
+use na::{Point3, Vector3};
 
 #[derive(Debug)]
 pub struct Camera {
@@ -12,17 +12,17 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
+    pub fn build_view_projection_matrix(&self) -> na::Matrix4<f32> {
         #[rustfmt::skip]
-        pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+        pub const OPENGL_TO_WGPU_MATRIX: na::Matrix4<f32> = na::Matrix4::new(
             1.0, 0.0, 0.0, 0.0,
             0.0, 1.0, 0.0, 0.0,
             0.0, 0.0, 0.5, 0.0,
             0.0, 0.0, 0.5, 1.0,
         );
 
-        let view = cgmath::Matrix4::look_at_rh(self.eye, self.target, self.up);
-        let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
+        let view = na::Matrix4::look_at_rh(&self.eye, &self.target, &self.up);
+        let proj = na::Matrix4::new_perspective(self.aspect, self.fovy, self.znear, self.zfar);
 
         OPENGL_TO_WGPU_MATRIX * proj * view
     }
@@ -32,11 +32,11 @@ impl Camera {
         Self {
             // position the camera one unit up and 2 units back
             // +z is out of the screen
-            eye: (-2., 1., 1.).into(),
+            eye: Point3::new(-2., 1., 1.),
             // have it look at the origin
-            target: (0.5, 0.5, 1.).into(),
+            target: Point3::new(0.5, 0.5, 1.),
             // which way is "up"
-            up: cgmath::Vector3::unit_y(),
+            up: na::Vector3::new(0., 1., 0.),
             aspect: width as f32 / height as f32,
             fovy: 45.0,
             znear: 0.1,
@@ -114,7 +114,6 @@ impl CameraController {
     }
 
     pub fn update_camera(&self, camera: &mut Camera) {
-        use cgmath::InnerSpace;
         let forward = camera.target - camera.eye;
         let forward_norm = forward.normalize();
         let forward_mag = forward.magnitude();
@@ -128,7 +127,7 @@ impl CameraController {
             camera.eye -= forward_norm * self.speed;
         }
 
-        let right = forward_norm.cross(camera.up);
+        let right = forward_norm.cross(&camera.up);
 
         // Redo radius calc in case the up/ down is pressed.
         let forward = camera.target - camera.eye;
