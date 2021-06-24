@@ -12,10 +12,14 @@ use winit::{
 mod camera;
 mod scene;
 mod state;
+mod ui;
 
 pub use camera::{Camera, CameraController};
 pub use scene::{Scene, Vertex};
 pub use state::State;
+pub use ui::{EguiRenderState, UIState};
+
+use crate::Simulation;
 
 pub fn render_texture(
     image_dir: std::path::PathBuf,
@@ -91,9 +95,9 @@ impl epi::RepaintSignal for RepaintSignal {
     }
 }
 
-pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
+pub fn open_window() -> Result<(), RecvError> {
     let event_loop = EventLoop::with_user_event();
-    let size = PhysicalSize::new(1280, 720);
+    let mut size = PhysicalSize::new(1280, 720);
     let window = WindowBuilder::new()
         .with_inner_size(size)
         .with_title("Fluid Simulation")
@@ -122,13 +126,14 @@ pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
     let mut ui_state = UIState::default();
     // -------------------------------------------
 
-    let size = window.inner_size();
-    let verticies = rx.recv()?;
+    let verticies = Vec::new();
     let mut scene = Scene::new(&verticies, &state.device, (size.width, size.height));
 
     let start_time = std::time::Instant::now();
     let mut last_render_time = start_time;
     let mut frame_count = 0;
+
+    let mut rx = None;
 
     event_loop.run(move |event, _, control_flow| {
         platform.handle_event(&event);
@@ -150,10 +155,11 @@ pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
                     }
                 },
                 WindowEvent::Resized(physical_size) => {
+                    size = *physical_size;
                     state.resize(*physical_size);
                 }
                 WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    // new_inner_size is &&mut so we have to dereference it twice
+                    size = **new_inner_size;
                     state.resize(**new_inner_size);
                 }
                 window_event => {
@@ -190,7 +196,19 @@ pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
                 }
                 .build();
 
-                ui_state.egui_update(platform.context(), &mut frame);
+                let mut should_start_simulation = false;
+                ui_state.egui_update(platform.context(), &mut frame, &mut should_start_simulation);
+
+                if should_start_simulation && rx.is_none() {
+                    rx = Some(match &ui_state.algorithm {
+                        ui::Algorithm::Mpm(params) => {
+                            start_simulation::<crate::MpmSimulation>(params.clone())
+                        }
+                        ui::Algorithm::Sph(params) => {
+                            start_simulation::<crate::SphSimulation>(params.clone())
+                        }
+                    })
+                }
 
                 let (_output, paint_commands) = platform.end_frame();
                 let paint_jobs = platform.context().tessellate(paint_commands);
@@ -206,8 +224,14 @@ pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
                     },
                 };
 
-                let verticies = rx.recv().expect("Failed to recieve verts");
+                let verticies = if let Some(rx) = &rx {
+                    rx.recv().expect("Failed to recieve verts")
+                } else {
+                    Vec::new()
+                };
+
                 state.update(&mut scene, &verticies);
+
                 match state.render(&scene, Some(egui_state)) {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
@@ -230,34 +254,26 @@ pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
     });
 }
 
-#[derive(Default)]
-pub struct UIState {
-    counter: i32,
-}
+fn start_simulation<S: Simulation + 'static>(
+    params: S::Parameters,
+) -> std::sync::mpsc::Receiver<Vec<Vertex>> {
+    let mut s = S::new(params);
+    let (tx, rx) = std::sync::mpsc::channel();
 
-impl UIState {
-    fn egui_update(&mut self, ctx: egui::CtxRef, _frame: &mut epi::Frame) {
-        egui::Window::new("My Window").show(&ctx, |ui| {
-            ui.label("Hello World!");
-            //
-            // Put the buttons and label on the same row:
-            ui.horizontal(|ui| {
-                if ui.button("-").clicked() {
-                    self.counter -= 1;
-                }
-                ui.label(self.counter.to_string());
-                if ui.button("+").clicked() {
-                    self.counter += 1;
-                }
-            });
-        });
-    }
-}
+    use crate::initial_condition::InitialCondition;
+    crate::initial_condition::Block.add_particles(&mut s);
 
-/// The Egui-associated state that `State::render` needs
-pub struct EguiRenderState<'a> {
-    platform: &'a egui_winit_platform::Platform,
-    render_pass: &'a mut egui_wgpu_backend::RenderPass,
-    paint_jobs: &'a [egui::ClippedMesh],
-    screen_descriptor: egui_wgpu_backend::ScreenDescriptor,
+    // TODO: Get this to work
+    //println!(
+    //"Running simulation with {:?} particles",
+    //s.params.num_particles
+    //);
+
+    std::thread::spawn(move || loop {
+        let verts = s.simulate_frame();
+
+        tx.send(verts).unwrap();
+    });
+
+    rx
 }

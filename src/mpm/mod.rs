@@ -27,28 +27,6 @@ pub struct MpmSimulation {
 }
 
 impl MpmSimulation {
-    /// Creates a new simulation with the given parameters.
-    pub fn new(params: MpmParameters) -> MpmSimulation {
-        MpmSimulation {
-            particles: MpmParticles::default(),
-            grid: MpmGrid::new(&params),
-            params,
-            weights: ParticleGridWeights::default(),
-        }
-    }
-
-    /// Adds a particle to the simulation.
-    pub(crate) fn add_particle(&mut self, position: [Scalar; 3], velocity: [Scalar; 3]) {
-        self.params.num_particles += 1;
-
-        // FIXME: Migrate the entire crate over to `nalgebra` so you don't have to deal
-        // with crap like this
-        let position = Vec3::new(position[0], position[1], position[2]);
-        let velocity = Vec3::new(velocity[0], velocity[1], velocity[2]);
-        self.particles.add_particle(position, velocity);
-        self.weights.add_particle();
-    }
-
     fn precompute_weights(&mut self) {
         self.weights
             .precompute(&self.grid.data, &self.particles.position);
@@ -288,6 +266,26 @@ pub(crate) fn update_bounds(position: &mut Vec3, bounds_min: Vec3, bounds_max: V
 }
 
 impl Simulation for MpmSimulation {
+    type Parameters = MpmParameters;
+
+    /// Creates a new simulation with the given parameters.
+    fn new(params: MpmParameters) -> MpmSimulation {
+        MpmSimulation {
+            particles: MpmParticles::default(),
+            grid: MpmGrid::new(&params),
+            params,
+            weights: ParticleGridWeights::default(),
+        }
+    }
+
+    /// Adds a particle to the simulation.
+    fn add_particle(&mut self, position: Vec3, velocity: Vec3) {
+        self.params.num_particles += 1;
+
+        self.particles.add_particle(position, velocity);
+        self.weights.add_particle();
+    }
+
     fn simulate_frame(&mut self) -> Vec<Vertex> {
         self.grid.clear_grid();
         self.precompute_weights();

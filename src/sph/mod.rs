@@ -1,12 +1,9 @@
 pub(crate) mod grid;
 pub(crate) mod kernels;
 
-use cgmath::prelude::*;
-use cgmath::{vec3, Vector3};
 use grid::{Coord, Grid};
 
 use crate::render::Vertex;
-use crate::update_bounds;
 use crate::{Scalar, Simulation, Vec3};
 use kernels::*;
 
@@ -20,8 +17,20 @@ pub struct SphSimulation {
 }
 
 impl SphSimulation {
-    pub fn new(params: SphParamaters) -> Self {
-        let grid_bounds = params.bounds + vec3(0.1, 0.1, 0.1);
+    pub(crate) fn position_to_coord(&self, pos: Vec3) -> Coord {
+        pos.map(|i| (i / self.params.h) as usize)
+    }
+
+    pub(crate) fn coord(&self, index: usize) -> Coord {
+        self.position_to_coord(self.positions[index])
+    }
+}
+
+impl Simulation for SphSimulation {
+    type Parameters = SphParamaters;
+
+    fn new(params: SphParamaters) -> Self {
+        let grid_bounds = params.bounds + Vec3::new(0.1, 0.1, 0.1);
         SphSimulation {
             masses: Vec::new(),
             positions: Vec::new(),
@@ -36,30 +45,20 @@ impl SphSimulation {
         }
     }
 
-    pub(crate) fn position_to_coord(&self, pos: Vec3) -> Coord {
-        pos.map(|i| (i / self.params.h) as usize)
+    fn simulate_frame(&mut self) -> Vec<Vertex> {
+        sph_simulate_frame(self)
     }
 
-    pub(crate) fn coord(&self, index: usize) -> Coord {
-        self.position_to_coord(self.positions[index])
-    }
-
-    pub(crate) fn add_particle(&mut self, position: Vec3) {
+    fn add_particle(&mut self, position: Vec3, velocity: Vec3) {
         let index = self.masses.len();
         self.masses.push((10. * self.params.h).powi(3));
         self.positions.push(position);
-        self.velocities.push(Vector3::zero());
-        self.force.push(Vector3::zero());
+        self.velocities.push(Vec3::zeros());
+        self.force.push(Vec3::zeros());
 
         self.grid
             .add_particle(self.position_to_coord(position), index);
         self.params.num_particles += 1;
-    }
-}
-
-impl Simulation for SphSimulation {
-    fn simulate_frame(&mut self) -> Vec<Vertex> {
-        sph_simulate_frame(self)
     }
 }
 
@@ -89,12 +88,12 @@ fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
             .clone()
             .map(|j| {
                 if i == j {
-                    return Vec3::zero();
+                    return Vec3::zeros();
                 }
                 let r_ij = s.positions[i] - s.positions[j];
 
-                if r_ij.magnitude2() > s.params.h * s.params.h {
-                    return Vec3::zero();
+                if r_ij.magnitude_squared() > s.params.h * s.params.h {
+                    return Vec3::zeros();
                 }
 
                 let pressure_j = s.params.k * (densities[j] - s.params.rest_density);
@@ -108,14 +107,14 @@ fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
             * neighbors
                 .map(|j| {
                     if i == j {
-                        return Vec3::zero();
+                        return Vec3::zeros();
                     }
                     let vdiff = s.velocities[j] - s.velocities[i];
 
                     let r_ij = s.positions[i] - s.positions[j];
 
-                    if r_ij.magnitude2() > s.params.h * s.params.h {
-                        return Vec3::zero();
+                    if r_ij.magnitude_squared() > s.params.h * s.params.h {
+                        return Vec3::zeros();
                     }
 
                     s.masses[j] * vdiff / densities[j]
@@ -136,7 +135,7 @@ fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
             &mut s.positions[i],
             &mut s.velocities[i],
             0.8,
-            Vector3::zero(),
+            Vec3::zeros(),
             s.params.bounds,
         );
 
@@ -145,8 +144,8 @@ fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
             s.grid.update_particle(i, old_coord, new_coord);
         }
 
-        let pos = s.positions[i];
-        let vel = s.velocities[i].magnitude2();
+        let pos = s.positions[i].cast();
+        let vel = s.velocities[i].magnitude_squared() as f32;
 
         verts.push(Vertex {
             position: [pos.x, pos.y, pos.z],
@@ -157,7 +156,28 @@ fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
     verts
 }
 
+fn update_bounds(
+    position: &mut Vec3,
+    velocity: &mut Vec3,
+    velocity_damping: Scalar,
+    bounds_min: Vec3,
+    bounds_max: Vec3,
+) {
+    (0..3).for_each(|i| {
+        if position[i] < bounds_min[i] - 0.01 {
+            velocity[i] *= -velocity_damping;
+            position[i] = bounds_min[i];
+        }
+
+        if position[i] > bounds_max[i] + 0.01 {
+            velocity[i] *= -velocity_damping;
+            position[i] = bounds_max[i];
+        }
+    })
+}
+
 /// A struct containing all of the high-level parameters for the SPH simulation
+#[derive(Clone, Debug)]
 pub struct SphParamaters {
     pub num_particles: usize,
     /// The time step
@@ -182,15 +202,15 @@ pub struct SphParamaters {
 impl Default for SphParamaters {
     fn default() -> Self {
         Self {
-            num_particles: 0, // TODO: Get this from the initializaiton
+            num_particles: 0,
             delta_time: 0.01,
             h: 0.04,
             rest_density: 1000.,
             k: 4.,
             mu: 8.,
-            gravity: -Vec3::unit_y(),
+            gravity: Vec3::new(0., -1., 0.),
             velocity_damping: 0.8,
-            bounds: vec3(0.5, 1.5, 2.),
+            bounds: Vec3::new(3., 3., 3.),
         }
     }
 }

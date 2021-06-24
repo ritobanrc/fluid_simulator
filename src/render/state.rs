@@ -1,6 +1,7 @@
 use crate::render::{Scene, Vertex};
 use wgpu::{
-    Adapter, Device, Instance, Queue, RenderPipeline, Surface, SwapChain, SwapChainDescriptor,
+    util::DeviceExt, Adapter, Device, Instance, Queue, RenderPipeline, Surface, SwapChain,
+    SwapChainDescriptor,
 };
 use winit::event::WindowEvent;
 use winit::window::Window;
@@ -295,8 +296,21 @@ impl State {
             bytemuck::cast_slice(&[scene.uniforms]),
         );
 
-        self.queue
-            .write_buffer(&scene.vertex_buffer, 0, bytemuck::cast_slice(verts));
+        if verts.len() != scene.num_particles as usize {
+            scene.num_particles = verts.len() as u32;
+
+            scene.vertex_buffer.destroy();
+            scene.vertex_buffer =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Vertex Buffer"),
+                        contents: bytemuck::cast_slice(verts),
+                        usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
+                    })
+        } else {
+            self.queue
+                .write_buffer(&scene.vertex_buffer, 0, bytemuck::cast_slice(verts));
+        }
     }
 
     pub fn render(

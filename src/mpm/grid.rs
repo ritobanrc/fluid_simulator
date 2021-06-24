@@ -5,7 +5,6 @@ use na::Vector3;
 
 use super::{MpmParameters, Scalar, Vec3};
 use data::GridData;
-use std::ops::Range;
 
 /// Stores the grid data for the Mpm Simulation
 pub struct MpmGrid {

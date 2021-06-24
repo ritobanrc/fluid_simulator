@@ -2,6 +2,7 @@ use super::{Scalar, Vec3};
 use nalgebra::Vector3;
 use std::ops::Range;
 
+#[derive(Debug, Clone)]
 pub struct MpmParameters {
     /// The total number of Lagrangian particles in the simulation
     pub num_particles: usize,
@@ -31,6 +32,7 @@ impl Default for MpmParameters {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct NeoHookeanParameters {
     pub youngs_modulus: Scalar,
     pub poissons_ratio: Scalar,
