@@ -92,7 +92,7 @@ impl GridData {
                 return false;
             }
         }
-        return true;
+        true
     }
 }
 

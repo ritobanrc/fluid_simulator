@@ -13,7 +13,7 @@ where
     T: Float + FromPrimitive,
 {
     let delta: T = (stop - start) / T::from_usize(num_steps - 1).expect("out of range");
-    return (0..num_steps).map(move |i| start + T::from_usize(i).expect("out of range") * delta);
+    (0..num_steps).map(move |i| start + T::from_usize(i).expect("out of range") * delta)
 }
 
 impl InitialCondition for Block {

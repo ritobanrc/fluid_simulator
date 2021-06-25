@@ -140,9 +140,9 @@ fn create_render_pipeline(
     scene: &Scene,
     texture_format: wgpu::TextureFormat,
 ) -> RenderPipeline {
-    fn dont_validate<'a>(
-        mut desc: wgpu::ShaderModuleDescriptor<'a>,
-    ) -> wgpu::ShaderModuleDescriptor<'a> {
+    fn dont_validate(
+        mut desc: wgpu::ShaderModuleDescriptor<'_>,
+    ) -> wgpu::ShaderModuleDescriptor<'_> {
         desc.flags.remove(wgpu::ShaderFlags::VALIDATION);
         desc
     }
@@ -266,6 +266,7 @@ impl State {
         }
     }
 
+    #[allow(clippy::single_match, clippy::collapsible_match)]
     pub fn input(&mut self, event: &WindowEvent, scene: &mut Scene) -> bool {
         use winit::event::{KeyboardInput, VirtualKeyCode};
         match event {
@@ -380,8 +381,8 @@ impl State {
                 .render_pass
                 .update_user_textures(&self.device, &self.queue);
             egui_state.render_pass.update_buffers(
-                &mut self.device,
-                &mut self.queue,
+                &self.device,
+                &self.queue,
                 &egui_state.paint_jobs,
                 &egui_state.screen_descriptor,
             );

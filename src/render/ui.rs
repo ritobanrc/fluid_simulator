@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use egui::{ComboBox, Ui, Widget};
+use egui::{ComboBox, Ui};
 
 use crate::{
     mpm::{
@@ -30,10 +30,7 @@ impl Default for Algorithm {
 impl PartialEq for Algorithm {
     fn eq(&self, other: &Self) -> bool {
         use Algorithm::*;
-        match (self, other) {
-            (Mpm(_), Mpm(_)) | (Sph(_), Sph(_)) => true,
-            _ => false,
-        }
+        matches!((self, other), (Mpm(_), Mpm(_)) | (Sph(_), Sph(_)))
     }
 }
 
@@ -48,9 +45,9 @@ impl EguiInspector for Algorithm {
 
 impl Display for Algorithm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            &Algorithm::Mpm(_) => write!(f, "Mpm"),
-            &Algorithm::Sph(_) => write!(f, "Sph"),
+        match *self {
+            Algorithm::Mpm(_) => write!(f, "Mpm"),
+            Algorithm::Sph(_) => write!(f, "Sph"),
         }
     }
 }
@@ -158,10 +155,10 @@ pub(super) enum ConstituveModels {
 impl PartialEq for ConstituveModels {
     fn eq(&self, other: &Self) -> bool {
         use ConstituveModels::*;
-        match (self, other) {
-            (NeoHookean(_), NeoHookean(_)) | (NewtonianFluid(_), NewtonianFluid(_)) => true,
-            _ => false,
-        }
+        matches!(
+            (self, other),
+            (NeoHookean(_), NeoHookean(_)) | (NewtonianFluid(_), NewtonianFluid(_))
+        )
     }
 }
 
@@ -173,9 +170,9 @@ impl Default for ConstituveModels {
 
 impl Display for ConstituveModels {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            &ConstituveModels::NeoHookean(_) => write!(f, "NeoHookean"),
-            &ConstituveModels::NewtonianFluid(_) => write!(f, "Newtonian Fluid"),
+        match *self {
+            ConstituveModels::NeoHookean(_) => write!(f, "NeoHookean"),
+            ConstituveModels::NewtonianFluid(_) => write!(f, "Newtonian Fluid"),
         }
     }
 }

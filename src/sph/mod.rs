@@ -62,6 +62,7 @@ impl Simulation for SphSimulation {
     }
 }
 
+#[allow(clippy::needless_range_loop, clippy::assign_op_pattern)]
 fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
     // This is a separate function because `self` is way too long, I wanna write
     // `s.positions[i]`

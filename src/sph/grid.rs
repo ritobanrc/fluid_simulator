@@ -34,7 +34,7 @@ impl Grid {
         self[coord].push(index);
     }
 
-    pub fn get_neighbors<'a>(&'a self, coord: Coord) -> impl Iterator<Item = usize> + Clone + 'a {
+    pub fn get_neighbors(&self, coord: Coord) -> impl Iterator<Item = usize> + Clone + '_ {
         iproduct!(
             coord.x.saturating_sub(1)..=coord.x + 1,
             coord.y.saturating_sub(1)..=coord.y + 1,

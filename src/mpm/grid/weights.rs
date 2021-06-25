@@ -73,6 +73,7 @@ impl GridData {
 
 /// The cubic kernel function N(x) described in Eqn. (122), pg. 33
 /// MPM SIGGRAPH Course Notes 2016
+#[allow(clippy::manual_range_contains)]
 pub fn kernel(x: f64) -> f64 {
     let x = x.abs();
     if 0. <= x && x < 1. {
@@ -99,6 +100,7 @@ pub fn kernel(x: f64) -> f64 {
 ///                     0                       2 <= |x|
 ///
 /// Where abs' is the derivative of the absolute value function, because chain rule.
+#[allow(clippy::manual_range_contains)]
 pub fn kernel_derivative(x: f64) -> f64 {
     let chain_rule = if x < 0. { -1. } else { 1. };
     let x = x.abs();

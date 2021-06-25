@@ -154,8 +154,6 @@ impl ConstitutiveModel for NewtonianFluid {
 
         let pressure = self.k * (density - self.rest_density);
 
-        let cauchy_stress = Matrix3::from_diagonal_element(-pressure);
-
-        cauchy_stress
+        Matrix3::from_diagonal_element(-pressure)
     }
 }
