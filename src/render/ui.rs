@@ -85,9 +85,18 @@ impl UIState {
                     self.algorithm.egui_update(ui);
                 });
 
-            if ui.button("Play").clicked() {
-                *start_simulation = true;
-            }
+            ui.separator();
+            ui.end_row();
+
+            ui.vertical_centered_justified(|ui| {
+                if ui.button("Play").clicked() {
+                    *start_simulation = true;
+                }
+
+                if ui.button("Reset").clicked() {
+                    eprintln!("Not implemented yet");
+                }
+            });
         });
     }
 }
@@ -111,19 +120,15 @@ impl<T: egui::math::Numeric + na::Scalar, D: na::Dim, S: na::storage::StorageMut
 
 impl<T: EguiInspector> EguiInspector for std::ops::Range<T> {
     fn egui_update(&mut self, ui: &mut Ui) {
-        ui.vertical(|ui| {
-            ui.horizontal(|ui| {
-                ui.add_space(10.);
-                ui.label("Min");
-                self.start.egui_update(ui);
-            });
+        ui.add_space(10.);
+        ui.label("Min");
+        self.start.egui_update(ui);
 
-            ui.horizontal(|ui| {
-                ui.add_space(10.);
-                ui.label("Max");
-                self.end.egui_update(ui);
-            });
-        });
+        ui.end_row();
+
+        ui.add_space(10.);
+        ui.label("Max");
+        self.end.egui_update(ui);
         ui.end_row();
     }
 }
@@ -179,6 +184,9 @@ impl Display for ConstituveModels {
 
 impl EguiInspector for ConstituveModels {
     fn egui_update(&mut self, ui: &mut Ui) {
+        ui.separator();
+        ui.end_row();
+
         ui.horizontal(|ui| {
             ui.selectable_value(
                 self,
@@ -193,12 +201,10 @@ impl EguiInspector for ConstituveModels {
         });
         ui.end_row();
 
-        egui::CollapsingHeader::new(format!("{} Constitutive Model", self))
-            .default_open(true)
-            .show(ui, |ui| match self {
-                Self::NeoHookean(a) => a.egui_update(ui),
-                Self::NewtonianFluid(a) => a.egui_update(ui),
-            });
+        match self {
+            Self::NeoHookean(a) => a.egui_update(ui),
+            Self::NewtonianFluid(a) => a.egui_update(ui),
+        }
     }
 }
 

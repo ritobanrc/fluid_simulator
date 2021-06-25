@@ -200,44 +200,7 @@ pub fn open_window() -> Result<(), RecvError> {
                 ui_state.egui_update(platform.context(), &mut frame, &mut should_start_simulation);
 
                 if should_start_simulation && rx.is_none() {
-                    // TODO: Get this out of this function
-                    rx = Some(match &ui_state.algorithm {
-                        ui::Algorithm::Mpm(params) => {
-                            match &params.constitutive_model {
-                                ui::ConstituveModels::NeoHookean(nh) => {
-                                    println!("Simulating MPM w/ NeoHookean Model: {:?}", nh);
-                                    start_simulation::<crate::MpmSimulation<crate::mpm::NeoHookean>>(
-                                        // Would be very nice to use type-changing struct update
-                                        // syntax (https://github.com/rust-lang/rfcs/pull/2528) here, but alas, its not stable yet
-                                        crate::MpmParameters {
-                                            num_particles: params.num_particles,
-                                            h: params.h,
-                                            bounds: params.bounds.clone(),
-                                            delta_time: params.delta_time,
-                                            use_affine: params.use_affine,
-                                            constitutive_model: nh.clone(),
-                                        }
-                                    )
-                                }
-                                ui::ConstituveModels::NewtonianFluid(nf) => {
-                                    println!("Simulating MPM w/ Newtonian Fluid Model: {:?}", nf);
-                                    start_simulation::<crate::MpmSimulation<crate::mpm::NewtonianFluid>>(
-                                        crate::MpmParameters {
-                                            num_particles: params.num_particles,
-                                            h: params.h,
-                                            bounds: params.bounds.clone(),
-                                            delta_time: params.delta_time,
-                                            use_affine: params.use_affine,
-                                            constitutive_model: nf.clone(),
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                        ui::Algorithm::Sph(params) => {
-                            start_simulation::<crate::SphSimulation>(params.clone())
-                        }
-                    })
+                    rx = Some(start_simulation(&ui_state.algorithm));
                 }
 
                 let (_output, paint_commands) = platform.end_frame();
@@ -284,9 +247,50 @@ pub fn open_window() -> Result<(), RecvError> {
     });
 }
 
-fn start_simulation<S: Simulation + 'static>(
+fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
+    // TODO: Get this out of this function
+    match algorithm {
+        ui::Algorithm::Mpm(params) => {
+            match &params.constitutive_model {
+                ui::ConstituveModels::NeoHookean(nh) => {
+                    println!("Simulating MPM w/ NeoHookean Model: {:?}", nh);
+                    start_simulation_helper::<crate::MpmSimulation<crate::mpm::NeoHookean>>(
+                        // Would be very nice to use type-changing struct update
+                        // syntax (https://github.com/rust-lang/rfcs/pull/2528) here, but alas, its not stable yet
+                        crate::MpmParameters {
+                            num_particles: params.num_particles,
+                            h: params.h,
+                            bounds: params.bounds.clone(),
+                            delta_time: params.delta_time,
+                            use_affine: params.use_affine,
+                            constitutive_model: nh.clone(),
+                        },
+                    )
+                }
+                ui::ConstituveModels::NewtonianFluid(nf) => {
+                    println!("Simulating MPM w/ Newtonian Fluid Model: {:?}", nf);
+                    start_simulation_helper::<crate::MpmSimulation<crate::mpm::NewtonianFluid>>(
+                        crate::MpmParameters {
+                            num_particles: params.num_particles,
+                            h: params.h,
+                            bounds: params.bounds.clone(),
+                            delta_time: params.delta_time,
+                            use_affine: params.use_affine,
+                            constitutive_model: nf.clone(),
+                        },
+                    )
+                }
+            }
+        }
+        ui::Algorithm::Sph(params) => {
+            start_simulation_helper::<crate::SphSimulation>(params.clone())
+        }
+    }
+}
+
+fn start_simulation_helper<S: Simulation + 'static>(
     params: S::Parameters,
-) -> std::sync::mpsc::Receiver<Vec<Vertex>> {
+) -> Receiver<Vec<Vertex>> {
     let mut s = S::new(params);
     let (tx, rx) = std::sync::mpsc::channel();
 
