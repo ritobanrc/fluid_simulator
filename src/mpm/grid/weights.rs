@@ -1,5 +1,5 @@
 use super::data::GridData;
-use super::{MpmParameters, Scalar, Vec3};
+use super::{Scalar, Vec3};
 use na::Vector3;
 use std::ops::Range;
 

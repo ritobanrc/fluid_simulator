@@ -46,7 +46,7 @@ fn main() {
     } else if let Some(path) = opt.output_dir {
         let (tx, rx) = channel::<Vec<Vertex>>();
 
-        let params = MpmParameters::default();
+        let params = MpmParameters::<mpm::NeoHookean>::default();
         let mut s = MpmSimulation::new(params);
         crate::initial_condition::Block.add_particles(&mut s);
 

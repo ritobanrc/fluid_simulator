@@ -1,12 +1,12 @@
-use super::{Scalar, Vec3};
-use nalgebra::Vector3;
+use super::{MpmSimulation, Scalar, Vec3};
+use nalgebra::{Matrix3, Vector3};
 use std::ops::Range;
 
 #[derive(Debug, Clone)]
-pub struct MpmParameters {
+pub struct MpmParameters<CM> {
     /// The total number of Lagrangian particles in the simulation
     pub num_particles: usize,
-    /// The radius of each particle/the grid spacing
+    /// The grid spacing
     pub h: Scalar,
     /// The bounds of the simulation.
     pub bounds: Range<Vec3>,
@@ -16,10 +16,10 @@ pub struct MpmParameters {
     /// Whether or not to use APIC (as opposed to PIC). TODO: Handle both FLIP and PIC
     pub use_affine: bool,
     /// Paramters for the Neo-Hookean Constitutive Model. TODO: Add support for other models
-    pub constitutive_model: NeoHookeanParameters,
+    pub constitutive_model: CM,
 }
 
-impl Default for MpmParameters {
+impl<CM: Default> Default for MpmParameters<CM> {
     fn default() -> Self {
         MpmParameters {
             num_particles: 0,
@@ -27,33 +27,135 @@ impl Default for MpmParameters {
             bounds: Vector3::zeros()..Vector3::new(2., 2., 2.),
             delta_time: 0.01,
             use_affine: false,
-            constitutive_model: NeoHookeanParameters::default(),
+            constitutive_model: CM::default(),
         }
+    }
+}
+
+/// Trait that describes a constitutive model. Note that the default implementations for both the
+/// Piola Kirchoff stress and the Cauchy stress use each other, so you must override at least one
+/// of them (otherwise they will recurse infinitely).
+///
+/// The current implementation of MPM uses only the Piola Kichoff stress.
+pub trait ConstitutiveModel: Send + Sized {
+    #[allow(non_snake_case)]
+    fn piola_kirchoff(&self, s: &MpmSimulation<Self>, p: usize) -> Matrix3<Scalar> {
+        let F = s.particles.deformation_gradient[p];
+        let F_inv_trans = F
+            .try_inverse()
+            .expect("Deformation gradient is not invertible")
+            .transpose();
+        let J = F.determinant();
+        let sigma = self.cauchy_stress(s, p);
+
+        J * sigma * F_inv_trans
+    }
+
+    #[allow(non_snake_case)]
+    fn cauchy_stress(&self, s: &MpmSimulation<Self>, p: usize) -> Matrix3<Scalar> {
+        let F = s.particles.deformation_gradient[p];
+        let F_trans = F.transpose();
+        let J = F.determinant();
+        let P = self.piola_kirchoff(s, p);
+
+        1. / J * P * F_trans
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct NeoHookeanParameters {
+pub struct NeoHookean {
     pub youngs_modulus: Scalar,
     pub poissons_ratio: Scalar,
+    pub mu: Scalar,
+    pub lambda: Scalar,
 }
 
-impl Default for NeoHookeanParameters {
-    fn default() -> Self {
-        NeoHookeanParameters {
-            youngs_modulus: 10000.,
-            poissons_ratio: 0.1,
+impl NeoHookean {
+    pub fn new(youngs_modulus: Scalar, poissons_ratio: Scalar) -> Self {
+        let mu = youngs_modulus / (2. * (1. + poissons_ratio));
+        let lambda =
+            youngs_modulus * poissons_ratio / ((1. + poissons_ratio) * (1. - 2. * poissons_ratio));
+
+        NeoHookean {
+            youngs_modulus,
+            poissons_ratio,
+            mu,
+            lambda,
         }
+    }
+
+    pub fn recalculate_lame_parameters(&mut self) {
+        self.mu = self.youngs_modulus / (2. * (1. + self.poissons_ratio));
+        self.lambda = self.youngs_modulus * self.poissons_ratio
+            / ((1. + self.poissons_ratio) * (1. - 2. * self.poissons_ratio));
     }
 }
 
-impl NeoHookeanParameters {
-    /// Calculates and returns the lame parametrs mu and lambda
-    pub fn get_lame_parameters(&self) -> (Scalar, Scalar) {
-        let mu = self.youngs_modulus / (2. * (1. + self.poissons_ratio));
-        let lambda = self.youngs_modulus * self.poissons_ratio
-            / ((1. + self.poissons_ratio) * (1. - 2. * self.poissons_ratio));
+impl Default for NeoHookean {
+    fn default() -> Self {
+        Self::new(10000., 0.1)
+    }
+}
 
-        (mu, lambda)
+impl ConstitutiveModel for NeoHookean {
+    fn piola_kirchoff(&self, s: &MpmSimulation<Self>, p: usize) -> Matrix3<Scalar> {
+        #![allow(non_snake_case)]
+        let F = s.particles.deformation_gradient[p];
+        let J = F.determinant();
+
+        let F_inv_trans = F
+            .try_inverse()
+            .expect("Deformation gradient is not invertible")
+            .transpose();
+
+        // TODO: Figure out what base this logarithm is supposed to be
+        let piola_kirchoff = self.mu * (F - F_inv_trans) + self.lambda * J.log10() * F_inv_trans;
+
+        if cfg!(debug_assertions) && piola_kirchoff.iter().any(|x| x.is_nan()) {
+            eprintln!("Piola Kirchoff is NaN: {:?}", piola_kirchoff);
+            eprintln!("    Deformation Gradient: {:?}", F);
+            eprintln!("    J: {:?}", J);
+            eprintln!("    Lame Parameters: {:?}, {:?}", self.mu, self.lambda);
+        }
+
+        piola_kirchoff
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewtonianFluid {
+    pub k: Scalar,
+    pub rest_density: Scalar,
+}
+
+impl NewtonianFluid {
+    pub fn new(k: Scalar, rest_density: Scalar) -> Self {
+        NewtonianFluid { k, rest_density }
+    }
+}
+
+impl Default for NewtonianFluid {
+    fn default() -> Self {
+        Self::new(4., 500.)
+    }
+}
+
+impl ConstitutiveModel for NewtonianFluid {
+    fn cauchy_stress(&self, s: &MpmSimulation<Self>, p: usize) -> Matrix3<Scalar> {
+        #![allow(non_snake_case)]
+
+        let deformation_gradient = s.particles.deformation_gradient[p];
+        // Hopefully the optimization is smart enough not to calculate J twice
+        let J = deformation_gradient.determinant();
+        let initial_volume = s.particles.initial_volume[p];
+
+        let volume = J * initial_volume;
+        let density = s.particles.mass[p] / volume;
+
+        let pressure = self.k * (density - self.rest_density);
+
+        let cauchy_stress = Matrix3::from_diagonal_element(-pressure);
+
+        cauchy_stress
     }
 }

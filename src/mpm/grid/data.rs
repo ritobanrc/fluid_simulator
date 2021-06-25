@@ -1,6 +1,6 @@
 use na::Vector3;
 
-use super::{MpmParameters, Scalar, Vec3};
+use super::{Scalar, Vec3};
 use std::ops::Range;
 
 /// Stores the metadata associated with the `MpmGrid`

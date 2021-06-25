@@ -1,9 +1,9 @@
 mod grid;
-mod parameters;
+pub mod parameters;
 mod particles;
 
 use na::Matrix3;
-pub use parameters::MpmParameters;
+pub use parameters::{MpmParameters, NeoHookean, NewtonianFluid};
 
 use nalgebra::Vector3;
 
@@ -14,19 +14,20 @@ use grid::MpmGrid;
 use particles::MpmParticles;
 
 use self::grid::weights::ParticleGridWeights;
+use self::parameters::ConstitutiveModel;
 
 type Scalar = f64;
 type Vec3 = Vector3<Scalar>;
 
 /// Contains all of the state for the Material Point Method Simulation
-pub struct MpmSimulation {
+pub struct MpmSimulation<CM> {
     pub particles: MpmParticles,
     pub grid: MpmGrid,
-    pub params: MpmParameters,
+    pub params: MpmParameters<CM>,
     pub weights: ParticleGridWeights,
 }
 
-impl MpmSimulation {
+impl<CM> MpmSimulation<CM> {
     fn precompute_weights(&mut self) {
         self.weights
             .precompute(&self.grid.data, &self.particles.position);
@@ -133,15 +134,17 @@ impl MpmSimulation {
                 .push(self.particles.mass[p] / density);
         }
     }
+}
 
+impl<CM: ConstitutiveModel> MpmSimulation<CM> {
     fn compute_forces(&mut self) {
         for i in 0..self.grid.data.num_cells {
-            // Just gravity, for now. Fg = -mg
+            // Gravity. Fg = -mg
             self.grid.force[i] = self.grid.mass[i] * Vec3::new(0., -1., 0.);
         }
 
         for p in 0..self.params.num_particles {
-            let piola_kirchoff = self.neo_hookean_piola_kirchoff(p);
+            let piola_kirchoff = self.params.constitutive_model.piola_kirchoff(&self, p);
 
             let MpmSimulation {
                 ref particles,
@@ -174,56 +177,9 @@ impl MpmSimulation {
                 });
         }
     }
+}
 
-    fn neo_hookean_piola_kirchoff(&self, p: usize) -> Matrix3<Scalar> {
-        #![allow(non_snake_case)]
-        let F = self.particles.deformation_gradient[p];
-        let J = F.determinant();
-
-        let (mu, lambda) = self.params.constitutive_model.get_lame_parameters();
-
-        let F_inv_trans = F
-            .try_inverse()
-            .expect("Deformation gradient is not invertible")
-            .transpose();
-
-        // TODO: Figure out what base this logarithm is supposed to be
-        let piola_kirchoff = mu * (F - F_inv_trans) + lambda * J.log10() * F_inv_trans;
-
-        if cfg!(debug_assertions) && piola_kirchoff.iter().any(|x| x.is_nan()) {
-            eprintln!("Piola Kirchoff is NaN: {:?}", piola_kirchoff);
-            eprintln!("    Deformation Gradient: {:?}", F);
-            eprintln!("    J: {:?}", J);
-            eprintln!("    Lame Parameters: {:?}, {:?}", mu, lambda);
-        }
-
-        piola_kirchoff
-    }
-
-    fn fluid_piola_kirchoff(&self, p: usize) -> Matrix3<Scalar> {
-        #![allow(non_snake_case)]
-        let k = 4.;
-        let rest_density = 500.; // TODO: Units
-
-        let deformation_gradient = self.particles.deformation_gradient[p];
-        let J = deformation_gradient.determinant();
-        let initial_volume = self.particles.initial_volume[p];
-
-        let volume = J * initial_volume;
-        let density = self.particles.mass[p] / volume;
-
-        let pressure = k * (density - rest_density);
-
-        let cauchy_stress = Matrix3::from_diagonal_element(-pressure);
-        let F_inv_trans = deformation_gradient
-            .try_inverse()
-            .expect("Deformation gradient is not invertible")
-            .transpose();
-        let piola_kirchoff = J * cauchy_stress * F_inv_trans;
-
-        piola_kirchoff
-    }
-
+impl<CM> MpmSimulation<CM> {
     fn update_deformation_gradient(&mut self) {
         for p in 0..self.params.num_particles {
             // Eqn. 181 Course Notes
@@ -265,11 +221,11 @@ pub(crate) fn update_bounds(position: &mut Vec3, bounds_min: Vec3, bounds_max: V
     })
 }
 
-impl Simulation for MpmSimulation {
-    type Parameters = MpmParameters;
+impl<CM: ConstitutiveModel> Simulation for MpmSimulation<CM> {
+    type Parameters = MpmParameters<CM>;
 
     /// Creates a new simulation with the given parameters.
-    fn new(params: MpmParameters) -> MpmSimulation {
+    fn new(params: Self::Parameters) -> Self {
         MpmSimulation {
             particles: MpmParticles::default(),
             grid: MpmGrid::new(&params),
@@ -323,7 +279,7 @@ impl Simulation for MpmSimulation {
     }
 }
 
-impl MpmSimulation {
+impl<CM> MpmSimulation<CM> {
     /// Returns an array of `Vertex`es, to be passed to the `render` module.
     /// The color of each vertex is based on the magnitude of the velocity of the particles
     fn create_verts(&self) -> Vec<Vertex> {

@@ -53,7 +53,7 @@ impl Simulation for SphSimulation {
         let index = self.masses.len();
         self.masses.push((10. * self.params.h).powi(3));
         self.positions.push(position);
-        self.velocities.push(Vec3::zeros());
+        self.velocities.push(velocity);
         self.force.push(Vec3::zeros());
 
         self.grid

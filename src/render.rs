@@ -200,9 +200,39 @@ pub fn open_window() -> Result<(), RecvError> {
                 ui_state.egui_update(platform.context(), &mut frame, &mut should_start_simulation);
 
                 if should_start_simulation && rx.is_none() {
+                    // TODO: Get this out of this function
                     rx = Some(match &ui_state.algorithm {
                         ui::Algorithm::Mpm(params) => {
-                            start_simulation::<crate::MpmSimulation>(params.clone())
+                            match &params.constitutive_model {
+                                ui::ConstituveModels::NeoHookean(nh) => {
+                                    println!("Simulating MPM w/ NeoHookean Model: {:?}", nh);
+                                    start_simulation::<crate::MpmSimulation<crate::mpm::NeoHookean>>(
+                                        // Would be very nice to use type-changing struct update
+                                        // syntax (https://github.com/rust-lang/rfcs/pull/2528) here, but alas, its not stable yet
+                                        crate::MpmParameters {
+                                            num_particles: params.num_particles,
+                                            h: params.h,
+                                            bounds: params.bounds.clone(),
+                                            delta_time: params.delta_time,
+                                            use_affine: params.use_affine,
+                                            constitutive_model: nh.clone(),
+                                        }
+                                    )
+                                }
+                                ui::ConstituveModels::NewtonianFluid(nf) => {
+                                    println!("Simulating MPM w/ Newtonian Fluid Model: {:?}", nf);
+                                    start_simulation::<crate::MpmSimulation<crate::mpm::NewtonianFluid>>(
+                                        crate::MpmParameters {
+                                            num_particles: params.num_particles,
+                                            h: params.h,
+                                            bounds: params.bounds.clone(),
+                                            delta_time: params.delta_time,
+                                            use_affine: params.use_affine,
+                                            constitutive_model: nf.clone(),
+                                        }
+                                    )
+                                }
+                            }
                         }
                         ui::Algorithm::Sph(params) => {
                             start_simulation::<crate::SphSimulation>(params.clone())

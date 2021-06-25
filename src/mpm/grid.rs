@@ -39,7 +39,7 @@ grid_impls!(
 );
 
 impl MpmGrid {
-    pub fn new(params: &MpmParameters) -> Self {
+    pub fn new<CM>(params: &MpmParameters<CM>) -> Self {
         let grid_bounds_start = params.bounds.start - Vec3::from_element(params.h);
         let grid_bounds_end = params.bounds.end + Vec3::from_element(params.h);
 
