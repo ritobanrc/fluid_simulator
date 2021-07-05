@@ -248,7 +248,6 @@ pub fn open_window() -> Result<(), RecvError> {
 }
 
 fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
-    // TODO: Get this out of this function
     match algorithm {
         ui::Algorithm::Mpm(params) => {
             match &params.constitutive_model {
@@ -262,7 +261,7 @@ fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
                             h: params.h,
                             bounds: params.bounds.clone(),
                             delta_time: params.delta_time,
-                            use_affine: params.use_affine,
+                            transfer_scheme: params.transfer_scheme,
                             constitutive_model: nh.clone(),
                         },
                     )
@@ -275,7 +274,7 @@ fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
                             h: params.h,
                             bounds: params.bounds.clone(),
                             delta_time: params.delta_time,
-                            use_affine: params.use_affine,
+                            transfer_scheme: params.transfer_scheme,
                             constitutive_model: nf.clone(),
                         },
                     )

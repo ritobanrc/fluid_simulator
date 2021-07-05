@@ -10,6 +10,7 @@ use data::GridData;
 pub struct MpmGrid {
     pub mass: Vec<Scalar>,
     pub velocity: Vec<Vec3>,
+    pub velocity_prev: Vec<Vec3>,
     pub momentum: Vec<Vec3>,
     pub force: Vec<Vec3>,
     pub data: GridData,
@@ -34,6 +35,7 @@ macro_rules! grid_impls {
 grid_impls!(
     mass | mass_mut: Scalar,
     velocity | velocity_mut: Vec3,
+    velocity_prev | velocity_prev_mut: Vec3,
     momentum | momentum_mut: Vec3,
     force | force_mut: Vec3
 );
@@ -48,6 +50,7 @@ impl MpmGrid {
         Self {
             mass: vec![0.; data.num_cells],
             velocity: vec![Vec3::zeros(); data.num_cells],
+            velocity_prev: vec![Vec3::zeros(); data.num_cells],
             momentum: vec![Vec3::zeros(); data.num_cells],
             force: vec![Vec3::zeros(); data.num_cells],
             data,
@@ -81,6 +84,8 @@ impl MpmGrid {
     }
 
     pub fn velocity_update(&mut self, delta_time: Scalar) {
+        self.velocity_prev.copy_from_slice(&self.velocity);
+
         for i in 0..self.data.num_cells {
             if self.mass[i] == 0. {
                 continue;

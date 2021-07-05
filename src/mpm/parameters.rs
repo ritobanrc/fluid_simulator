@@ -13,10 +13,26 @@ pub struct MpmParameters<CM> {
     /// The size of the time step. Larger time steps will simulate faster, but may be unstable or
     /// innaccurate.
     pub delta_time: Scalar,
-    /// Whether or not to use APIC (as opposed to PIC). TODO: Handle both FLIP and PIC
-    pub use_affine: bool,
+    /// Which algorithm to use for transferring between particles and grid nodes (PIC, FLIP, APIC,
+    /// or a PIC/FLIP blend)
+    pub transfer_scheme: TransferScheme,
     /// Paramters for the Neo-Hookean Constitutive Model. TODO: Add support for other models
     pub constitutive_model: CM,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[allow(non_camel_case_types)]
+pub enum TransferScheme {
+    PIC,
+    FLIP,
+    APIC,
+    PIC_FLIP(f64),
+}
+
+impl Default for TransferScheme {
+    fn default() -> Self {
+        TransferScheme::APIC
+    }
 }
 
 impl<CM: Default> Default for MpmParameters<CM> {
@@ -26,7 +42,7 @@ impl<CM: Default> Default for MpmParameters<CM> {
             h: 0.05,
             bounds: Vector3::zeros()..Vector3::new(2., 2., 2.),
             delta_time: 0.01,
-            use_affine: false,
+            transfer_scheme: TransferScheme::default(),
             constitutive_model: CM::default(),
         }
     }
@@ -108,8 +124,7 @@ impl ConstitutiveModel for NeoHookean {
             .expect("Deformation gradient is not invertible")
             .transpose();
 
-        // TODO: Figure out what base this logarithm is supposed to be
-        let piola_kirchoff = self.mu * (F - F_inv_trans) + self.lambda * J.log10() * F_inv_trans;
+        let piola_kirchoff = self.mu * (F - F_inv_trans) + self.lambda * J.ln() * F_inv_trans;
 
         if cfg!(debug_assertions) && piola_kirchoff.iter().any(|x| x.is_nan()) {
             eprintln!("Piola Kirchoff is NaN: {:?}", piola_kirchoff);

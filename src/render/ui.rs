@@ -135,6 +135,7 @@ impl<T: EguiInspector> EguiInspector for std::ops::Range<T> {
 
 impl<CM: EguiInspector> EguiInspector for MpmParameters<CM> {
     fn egui_update(&mut self, ui: &mut Ui) {
+        use crate::mpm::parameters::TransferScheme;
         ui.label("h: ");
         ui.add(egui::Slider::new(&mut self.h, 0. ..=0.1));
         ui.end_row();
@@ -146,6 +147,26 @@ impl<CM: EguiInspector> EguiInspector for MpmParameters<CM> {
         ui.label("Bounds");
         ui.end_row();
         self.bounds.egui_update(ui);
+
+        ui.separator();
+        ui.end_row();
+        ui.label("Transfer Scheme");
+        ui.end_row();
+        ui.radio_value(&mut self.transfer_scheme, TransferScheme::PIC, "PIC");
+        ui.end_row();
+        ui.radio_value(&mut self.transfer_scheme, TransferScheme::FLIP, "FLIP");
+        ui.end_row();
+        ui.radio_value(&mut self.transfer_scheme, TransferScheme::APIC, "APIC");
+        ui.end_row();
+        ui.radio_value(
+            &mut self.transfer_scheme,
+            TransferScheme::PIC_FLIP(0.95),
+            "PIC/FLIP Blend",
+        );
+        if let TransferScheme::PIC_FLIP(ref mut blend) = self.transfer_scheme {
+            ui.add(egui::DragValue::new(blend));
+        }
+        ui.end_row();
 
         self.constitutive_model.egui_update(ui);
     }

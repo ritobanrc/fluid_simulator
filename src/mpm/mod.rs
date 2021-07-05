@@ -7,6 +7,7 @@ pub use parameters::{MpmParameters, NeoHookean, NewtonianFluid};
 
 use nalgebra::Vector3;
 
+use crate::mpm::parameters::TransferScheme;
 use crate::render::Vertex;
 use crate::Simulation;
 
@@ -69,7 +70,7 @@ impl<CM> MpmSimulation<CM> {
 
                 // Eqn. 128, Course Notes
                 let mut v_adjusted = particles.velocity[p];
-                if params.use_affine {
+                if params.transfer_scheme == TransferScheme::APIC {
                     let xi = grid.data.coord_to_pos(i);
                     let xp = particles.position[p];
                     v_adjusted += particles.affine_matrix[p] * Dp_inv * (xi - xp);
@@ -89,10 +90,14 @@ impl<CM> MpmSimulation<CM> {
         } = self;
 
         for p in 0..params.num_particles {
-            particles.velocity[p] = Vector3::zeros();
-            if params.use_affine {
+            //let initial_particle_velocity = particles.velocity[p];
+            //particles.velocity[p] = Vector3::zeros();
+            if params.transfer_scheme == TransferScheme::APIC {
                 particles.affine_matrix[p] = Matrix3::zeros();
             }
+
+            let mut xpic_next_velocity = Vec3::zeros();
+            let mut flip_next_velocity = particles.velocity[p];
 
             weights.particle_grid_iterator(p).for_each(|(i, weight)| {
                 if cfg!(debug_assertions) && !grid.data.coord_in_grid(i) {
@@ -103,15 +108,25 @@ impl<CM> MpmSimulation<CM> {
                     return;
                 }
 
-                particles.velocity[p] += weight * grid.velocity(i).unwrap();
+                xpic_next_velocity += weight * grid.velocity(i).unwrap();
+                flip_next_velocity +=
+                    weight * (grid.velocity(i).unwrap() - grid.velocity_prev(i).unwrap());
 
-                if params.use_affine {
+                if params.transfer_scheme == TransferScheme::APIC {
                     let xi = grid.data.coord_to_pos(i);
                     let xp = particles.position[p];
                     particles.affine_matrix[p] +=
                         weight * grid.velocity(i).unwrap() * (xi - xp).transpose();
                 }
             });
+
+            particles.velocity[p] = match self.params.transfer_scheme {
+                TransferScheme::PIC | TransferScheme::APIC => xpic_next_velocity,
+                TransferScheme::FLIP => flip_next_velocity,
+                TransferScheme::PIC_FLIP(blend) => {
+                    blend * flip_next_velocity + (1. - blend) * xpic_next_velocity
+                }
+            };
         }
     }
 
