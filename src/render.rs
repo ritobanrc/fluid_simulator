@@ -309,7 +309,7 @@ fn start_simulation_helper<S: Simulation + 'static>(
     let (tx, rx) = std::sync::mpsc::channel();
 
     use crate::initial_condition::InitialCondition;
-    crate::initial_condition::Block.add_particles(&mut s);
+    crate::initial_condition::Sphere::default().add_particles(&mut s);
 
     // TODO: Get this to work
     //println!(

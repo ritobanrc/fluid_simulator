@@ -61,14 +61,14 @@ impl GridData {
 
     /// Gets a 4x4 neighborhood of grid nodes around a point
     pub fn particle_neighborhood(&self, p: Vec3) -> Range<Vector3<usize>> {
-        // transform the point into "grid space"
-        assert!(
+        debug_assert!(
             self.bounds.contains_point(p),
             "Particle {:?} not in Grid Bounds {:?}",
             p,
             self.bounds
         );
 
+        // transform the point into "grid space"
         let grid_space_pos = (p - self.bounds.start) * self.one_over_h;
 
         // usize cast shouldn't panic because of assert above

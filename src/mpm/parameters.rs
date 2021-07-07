@@ -119,6 +119,10 @@ impl ConstitutiveModel for NeoHookean {
         let F = s.particles.deformation_gradient[p];
         let J = F.determinant();
 
+        if J <= 0. {
+            eprintln!("J = {:?} will result in NaNs", J);
+        }
+
         let F_inv_trans = F
             .try_inverse()
             .expect("Deformation gradient is not invertible")

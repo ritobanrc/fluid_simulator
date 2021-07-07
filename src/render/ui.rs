@@ -158,13 +158,28 @@ impl<CM: EguiInspector> EguiInspector for MpmParameters<CM> {
         ui.end_row();
         ui.radio_value(&mut self.transfer_scheme, TransferScheme::APIC, "APIC");
         ui.end_row();
+
+        // NOTE: This is a kinda ugly hack to keep the radio button selected even when the blend
+        // value is changed. Basically, when the radio button is selected, we're making egui think
+        // that clicking the radio button sets it to the blend value it already is.
+        let pic_flip_blend_select = if let TransferScheme::PIC_FLIP(blend) = self.transfer_scheme {
+            TransferScheme::PIC_FLIP(blend)
+        } else {
+            TransferScheme::PIC_FLIP(0.95)
+        };
+
         ui.radio_value(
             &mut self.transfer_scheme,
-            TransferScheme::PIC_FLIP(0.95),
+            pic_flip_blend_select,
             "PIC/FLIP Blend",
         );
+
         if let TransferScheme::PIC_FLIP(ref mut blend) = self.transfer_scheme {
-            ui.add(egui::DragValue::new(blend));
+            ui.add(
+                egui::DragValue::new(blend)
+                    .clamp_range(0. ..=1.)
+                    .speed(0.02),
+            );
         }
         ui.end_row();
 
