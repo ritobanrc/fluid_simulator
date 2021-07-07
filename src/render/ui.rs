@@ -4,7 +4,7 @@ use egui::{ComboBox, Ui};
 
 use crate::{
     mpm::{
-        parameters::{NeoHookean, NewtonianFluid},
+        parameters::{FixedCorotated, NeoHookean, NewtonianFluid},
         MpmParameters,
     },
     sph::SphParamaters,
@@ -176,6 +176,7 @@ impl<CM: EguiInspector> EguiInspector for MpmParameters<CM> {
 pub(super) enum ConstituveModels {
     NeoHookean(NeoHookean),
     NewtonianFluid(NewtonianFluid),
+    FixedCorotated(FixedCorotated),
 }
 
 impl PartialEq for ConstituveModels {
@@ -183,7 +184,9 @@ impl PartialEq for ConstituveModels {
         use ConstituveModels::*;
         matches!(
             (self, other),
-            (NeoHookean(_), NeoHookean(_)) | (NewtonianFluid(_), NewtonianFluid(_))
+            (NeoHookean(_), NeoHookean(_))
+                | (NewtonianFluid(_), NewtonianFluid(_))
+                | (FixedCorotated(_), FixedCorotated(_))
         )
     }
 }
@@ -199,6 +202,7 @@ impl Display for ConstituveModels {
         match *self {
             ConstituveModels::NeoHookean(_) => write!(f, "NeoHookean"),
             ConstituveModels::NewtonianFluid(_) => write!(f, "Newtonian Fluid"),
+            ConstituveModels::FixedCorotated(_) => write!(f, "Fixed Corotated"),
         }
     }
 }
@@ -208,23 +212,27 @@ impl EguiInspector for ConstituveModels {
         ui.separator();
         ui.end_row();
 
-        ui.horizontal(|ui| {
-            ui.selectable_value(
-                self,
-                ConstituveModels::NeoHookean(NeoHookean::default()),
-                "NeoHookean",
-            );
-            ui.selectable_value(
-                self,
-                ConstituveModels::NewtonianFluid(NewtonianFluid::default()),
-                "Newtonian Fluid",
-            );
-        });
+        ui.selectable_value(
+            self,
+            ConstituveModels::NeoHookean(NeoHookean::default()),
+            "NeoHookean",
+        );
+        ui.selectable_value(
+            self,
+            ConstituveModels::NewtonianFluid(NewtonianFluid::default()),
+            "Newtonian Fluid",
+        );
+        ui.selectable_value(
+            self,
+            ConstituveModels::FixedCorotated(FixedCorotated::default()),
+            "Fixed Corotated",
+        );
         ui.end_row();
 
         match self {
             Self::NeoHookean(a) => a.egui_update(ui),
             Self::NewtonianFluid(a) => a.egui_update(ui),
+            Self::FixedCorotated(a) => a.egui_update(ui),
         }
     }
 }
@@ -233,7 +241,25 @@ impl EguiInspector for NeoHookean {
     fn egui_update(&mut self, ui: &mut Ui) {
         ui.label("Young's Modulus: ");
         let response_youngs_modulus =
-            ui.add(egui::Slider::new(&mut self.youngs_modulus, 0. ..=10_000.));
+            ui.add(egui::Slider::new(&mut self.youngs_modulus, 0. ..=50_000.));
+        ui.end_row();
+
+        ui.label("Poisson's Ratio: ");
+        let response_poissons_ratio =
+            ui.add(egui::Slider::new(&mut self.poissons_ratio, 0. ..=0.5));
+        ui.end_row();
+
+        if response_youngs_modulus.changed() || response_poissons_ratio.changed() {
+            self.recalculate_lame_parameters();
+        }
+    }
+}
+
+impl EguiInspector for FixedCorotated {
+    fn egui_update(&mut self, ui: &mut Ui) {
+        ui.label("Young's Modulus: ");
+        let response_youngs_modulus =
+            ui.add(egui::Slider::new(&mut self.youngs_modulus, 0. ..=50_000.));
         ui.end_row();
 
         ui.label("Poisson's Ratio: ");

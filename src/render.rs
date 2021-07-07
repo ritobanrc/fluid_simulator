@@ -266,6 +266,7 @@ fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
                         },
                     )
                 }
+
                 ui::ConstituveModels::NewtonianFluid(nf) => {
                     println!("Simulating MPM w/ Newtonian Fluid Model: {:?}", nf);
                     start_simulation_helper::<crate::MpmSimulation<crate::mpm::NewtonianFluid>>(
@@ -276,6 +277,20 @@ fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
                             delta_time: params.delta_time,
                             transfer_scheme: params.transfer_scheme,
                             constitutive_model: nf.clone(),
+                        },
+                    )
+                }
+
+                ui::ConstituveModels::FixedCorotated(fc) => {
+                    println!("Simulating MPM w/ FixedCorotated Model: {:?}", fc);
+                    start_simulation_helper::<crate::MpmSimulation<crate::mpm::FixedCorotated>>(
+                        crate::MpmParameters {
+                            num_particles: params.num_particles,
+                            h: params.h,
+                            bounds: params.bounds.clone(),
+                            delta_time: params.delta_time,
+                            transfer_scheme: params.transfer_scheme,
+                            constitutive_model: fc.clone(),
                         },
                     )
                 }

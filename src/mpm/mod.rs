@@ -3,7 +3,7 @@ pub mod parameters;
 mod particles;
 
 use na::Matrix3;
-pub use parameters::{MpmParameters, NeoHookean, NewtonianFluid};
+pub use parameters::{FixedCorotated, MpmParameters, NeoHookean, NewtonianFluid};
 
 use nalgebra::Vector3;
 
@@ -37,6 +37,8 @@ impl<CM> MpmSimulation<CM> {
     fn particles_to_grid(&mut self) {
         // NOTE: Because Dp is proportional to the identity matrix (See Course Notes Pg. 42)
         //       its stored as just a float
+        //
+        //  TODO: Support other degree polynomials
         #![allow(non_snake_case)]
         let Dp = (self.params.h * self.params.h) / 3.;
         let Dp_inv = 1. / Dp;
@@ -56,8 +58,7 @@ impl<CM> MpmSimulation<CM> {
                 if cfg!(debug_assertions) && !grid.data.coord_in_grid(i) {
                     // FIXME: This check should not be necessary, ideally,
                     // `particle_grid_iterator` simply should not return grid cells that are
-                    // out of bounds. But I'm leaving this in here for now cause debugging
-                    // boundary issues is a pain
+                    // out of bounds.
                     eprintln!(
                         "Particle neighborhood cell out of range. Cell: {:?}, Particle Pos: {:?}",
                         i, particles.position[p]

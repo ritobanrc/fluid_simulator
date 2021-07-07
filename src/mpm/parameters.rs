@@ -109,7 +109,7 @@ impl NeoHookean {
 
 impl Default for NeoHookean {
     fn default() -> Self {
-        Self::new(10000., 0.1)
+        Self::new(9500., 0.05)
     }
 }
 
@@ -170,5 +170,62 @@ impl ConstitutiveModel for NewtonianFluid {
         let pressure = self.k * (density - self.rest_density);
 
         Matrix3::from_diagonal_element(-pressure)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FixedCorotated {
+    // TODO: Remove this code duplication w/ Neo-Hookean
+    pub youngs_modulus: Scalar,
+    pub poissons_ratio: Scalar,
+    pub mu: Scalar,
+    pub lambda: Scalar,
+}
+
+impl FixedCorotated {
+    pub fn new(youngs_modulus: Scalar, poissons_ratio: Scalar) -> Self {
+        let mu = youngs_modulus / (2. * (1. + poissons_ratio));
+        let lambda =
+            youngs_modulus * poissons_ratio / ((1. + poissons_ratio) * (1. - 2. * poissons_ratio));
+
+        FixedCorotated {
+            youngs_modulus,
+            poissons_ratio,
+            mu,
+            lambda,
+        }
+    }
+
+    pub fn recalculate_lame_parameters(&mut self) {
+        self.mu = self.youngs_modulus / (2. * (1. + self.poissons_ratio));
+        self.lambda = self.youngs_modulus * self.poissons_ratio
+            / ((1. + self.poissons_ratio) * (1. - 2. * self.poissons_ratio));
+    }
+}
+
+impl Default for FixedCorotated {
+    fn default() -> Self {
+        Self::new(9500., 0.05)
+    }
+}
+
+impl ConstitutiveModel for FixedCorotated {
+    fn piola_kirchoff(&self, s: &MpmSimulation<Self>, p: usize) -> Matrix3<Scalar> {
+        #![allow(non_snake_case)]
+        let F = s.particles.deformation_gradient[p];
+        let J = F.determinant();
+
+        let svd = F.svd(true, true);
+        let R = svd.u.unwrap() * svd.v_t.unwrap();
+
+        let F_inv_trans = F
+            .try_inverse()
+            .expect("Deformation gradient is not invertible")
+            .transpose();
+
+        let mu_term = 2. * self.mu * (F - R);
+        let lambda_term = self.lambda * (J - 1.) * J * F_inv_trans;
+
+        mu_term + lambda_term
     }
 }
