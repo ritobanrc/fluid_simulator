@@ -1,12 +1,13 @@
 mod grid;
-mod parameters;
+pub mod parameters;
 mod particles;
 
 use na::Matrix3;
-pub use parameters::MpmParameters;
+pub use parameters::{FixedCorotated, MpmParameters, NeoHookean, NewtonianFluid};
 
 use nalgebra::Vector3;
 
+use crate::mpm::parameters::TransferScheme;
 use crate::render::Vertex;
 use crate::Simulation;
 
@@ -14,41 +15,20 @@ use grid::MpmGrid;
 use particles::MpmParticles;
 
 use self::grid::weights::ParticleGridWeights;
+use self::parameters::ConstitutiveModel;
 
 type Scalar = f64;
 type Vec3 = Vector3<Scalar>;
 
 /// Contains all of the state for the Material Point Method Simulation
-pub struct MpmSimulation {
+pub struct MpmSimulation<CM> {
     pub particles: MpmParticles,
     pub grid: MpmGrid,
-    pub params: MpmParameters,
+    pub params: MpmParameters<CM>,
     pub weights: ParticleGridWeights,
 }
 
-impl MpmSimulation {
-    /// Creates a new simulation with the given parameters.
-    pub fn new(params: MpmParameters) -> MpmSimulation {
-        MpmSimulation {
-            particles: MpmParticles::default(),
-            grid: MpmGrid::new(&params),
-            params,
-            weights: ParticleGridWeights::default(),
-        }
-    }
-
-    /// Adds a particle to the simulation.
-    pub(crate) fn add_particle(&mut self, position: [Scalar; 3], velocity: [Scalar; 3]) {
-        self.params.num_particles += 1;
-
-        // FIXME: Migrate the entire crate over to `nalgebra` so you don't have to deal
-        // with crap like this
-        let position = Vec3::new(position[0], position[1], position[2]);
-        let velocity = Vec3::new(velocity[0], velocity[1], velocity[2]);
-        self.particles.add_particle(position, velocity);
-        self.weights.add_particle();
-    }
-
+impl<CM> MpmSimulation<CM> {
     fn precompute_weights(&mut self) {
         self.weights
             .precompute(&self.grid.data, &self.particles.position);
@@ -57,6 +37,8 @@ impl MpmSimulation {
     fn particles_to_grid(&mut self) {
         // NOTE: Because Dp is proportional to the identity matrix (See Course Notes Pg. 42)
         //       its stored as just a float
+        //
+        //  TODO: Support other degree polynomials
         #![allow(non_snake_case)]
         let Dp = (self.params.h * self.params.h) / 3.;
         let Dp_inv = 1. / Dp;
@@ -76,8 +58,7 @@ impl MpmSimulation {
                 if cfg!(debug_assertions) && !grid.data.coord_in_grid(i) {
                     // FIXME: This check should not be necessary, ideally,
                     // `particle_grid_iterator` simply should not return grid cells that are
-                    // out of bounds. But I'm leaving this in here for now cause debugging
-                    // boundary issues is a pain
+                    // out of bounds.
                     eprintln!(
                         "Particle neighborhood cell out of range. Cell: {:?}, Particle Pos: {:?}",
                         i, particles.position[p]
@@ -90,7 +71,7 @@ impl MpmSimulation {
 
                 // Eqn. 128, Course Notes
                 let mut v_adjusted = particles.velocity[p];
-                if params.use_affine {
+                if params.transfer_scheme == TransferScheme::APIC {
                     let xi = grid.data.coord_to_pos(i);
                     let xp = particles.position[p];
                     v_adjusted += particles.affine_matrix[p] * Dp_inv * (xi - xp);
@@ -110,10 +91,14 @@ impl MpmSimulation {
         } = self;
 
         for p in 0..params.num_particles {
-            particles.velocity[p] = Vector3::zeros();
-            if params.use_affine {
+            //let initial_particle_velocity = particles.velocity[p];
+            //particles.velocity[p] = Vector3::zeros();
+            if params.transfer_scheme == TransferScheme::APIC {
                 particles.affine_matrix[p] = Matrix3::zeros();
             }
+
+            let mut xpic_next_velocity = Vec3::zeros();
+            let mut flip_next_velocity = particles.velocity[p];
 
             weights.particle_grid_iterator(p).for_each(|(i, weight)| {
                 if cfg!(debug_assertions) && !grid.data.coord_in_grid(i) {
@@ -124,15 +109,25 @@ impl MpmSimulation {
                     return;
                 }
 
-                particles.velocity[p] += weight * grid.velocity(i).unwrap();
+                xpic_next_velocity += weight * grid.velocity(i).unwrap();
+                flip_next_velocity +=
+                    weight * (grid.velocity(i).unwrap() - grid.velocity_prev(i).unwrap());
 
-                if params.use_affine {
+                if params.transfer_scheme == TransferScheme::APIC {
                     let xi = grid.data.coord_to_pos(i);
                     let xp = particles.position[p];
                     particles.affine_matrix[p] +=
                         weight * grid.velocity(i).unwrap() * (xi - xp).transpose();
                 }
             });
+
+            particles.velocity[p] = match self.params.transfer_scheme {
+                TransferScheme::PIC | TransferScheme::APIC => xpic_next_velocity,
+                TransferScheme::FLIP => flip_next_velocity,
+                TransferScheme::PIC_FLIP(blend) => {
+                    blend * flip_next_velocity + (1. - blend) * xpic_next_velocity
+                }
+            };
         }
     }
 
@@ -155,15 +150,17 @@ impl MpmSimulation {
                 .push(self.particles.mass[p] / density);
         }
     }
+}
 
+impl<CM: ConstitutiveModel> MpmSimulation<CM> {
     fn compute_forces(&mut self) {
         for i in 0..self.grid.data.num_cells {
-            // Just gravity, for now. Fg = -mg
+            // Gravity. Fg = -mg
             self.grid.force[i] = self.grid.mass[i] * Vec3::new(0., -1., 0.);
         }
 
         for p in 0..self.params.num_particles {
-            let piola_kirchoff = self.neo_hookean_piola_kirchoff(p);
+            let piola_kirchoff = self.params.constitutive_model.piola_kirchoff(&self, p);
 
             let MpmSimulation {
                 ref particles,
@@ -196,56 +193,9 @@ impl MpmSimulation {
                 });
         }
     }
+}
 
-    fn neo_hookean_piola_kirchoff(&self, p: usize) -> Matrix3<Scalar> {
-        #![allow(non_snake_case)]
-        let F = self.particles.deformation_gradient[p];
-        let J = F.determinant();
-
-        let (mu, lambda) = self.params.constitutive_model.get_lame_parameters();
-
-        let F_inv_trans = F
-            .try_inverse()
-            .expect("Deformation gradient is not invertible")
-            .transpose();
-
-        // TODO: Figure out what base this logarithm is supposed to be
-        let piola_kirchoff = mu * (F - F_inv_trans) + lambda * J.log10() * F_inv_trans;
-
-        if cfg!(debug_assertions) && piola_kirchoff.iter().any(|x| x.is_nan()) {
-            eprintln!("Piola Kirchoff is NaN: {:?}", piola_kirchoff);
-            eprintln!("    Deformation Gradient: {:?}", F);
-            eprintln!("    J: {:?}", J);
-            eprintln!("    Lame Parameters: {:?}, {:?}", mu, lambda);
-        }
-
-        piola_kirchoff
-    }
-
-    fn fluid_piola_kirchoff(&self, p: usize) -> Matrix3<Scalar> {
-        #![allow(non_snake_case)]
-        let k = 4.;
-        let rest_density = 500.; // TODO: Units
-
-        let deformation_gradient = self.particles.deformation_gradient[p];
-        let J = deformation_gradient.determinant();
-        let initial_volume = self.particles.initial_volume[p];
-
-        let volume = J * initial_volume;
-        let density = self.particles.mass[p] / volume;
-
-        let pressure = k * (density - rest_density);
-
-        let cauchy_stress = Matrix3::from_diagonal_element(-pressure);
-        let F_inv_trans = deformation_gradient
-            .try_inverse()
-            .expect("Deformation gradient is not invertible")
-            .transpose();
-        let piola_kirchoff = J * cauchy_stress * F_inv_trans;
-
-        piola_kirchoff
-    }
-
+impl<CM> MpmSimulation<CM> {
     fn update_deformation_gradient(&mut self) {
         for p in 0..self.params.num_particles {
             // Eqn. 181 Course Notes
@@ -287,7 +237,27 @@ pub(crate) fn update_bounds(position: &mut Vec3, bounds_min: Vec3, bounds_max: V
     })
 }
 
-impl Simulation for MpmSimulation {
+impl<CM: ConstitutiveModel> Simulation for MpmSimulation<CM> {
+    type Parameters = MpmParameters<CM>;
+
+    /// Creates a new simulation with the given parameters.
+    fn new(params: Self::Parameters) -> Self {
+        MpmSimulation {
+            particles: MpmParticles::default(),
+            grid: MpmGrid::new(&params),
+            params,
+            weights: ParticleGridWeights::default(),
+        }
+    }
+
+    /// Adds a particle to the simulation.
+    fn add_particle(&mut self, position: Vec3, velocity: Vec3) {
+        self.params.num_particles += 1;
+
+        self.particles.add_particle(position, velocity);
+        self.weights.add_particle();
+    }
+
     fn simulate_frame(&mut self) -> Vec<Vertex> {
         self.grid.clear_grid();
         self.precompute_weights();
@@ -325,7 +295,7 @@ impl Simulation for MpmSimulation {
     }
 }
 
-impl MpmSimulation {
+impl<CM> MpmSimulation<CM> {
     /// Returns an array of `Vertex`es, to be passed to the `render` module.
     /// The color of each vertex is based on the magnitude of the velocity of the particles
     fn create_verts(&self) -> Vec<Vertex> {

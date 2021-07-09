@@ -1,3 +1,4 @@
+use egui_wgpu_backend::RenderPass;
 use futures::executor::block_on;
 use std::sync::mpsc::{Receiver, RecvError};
 use std::time::Instant;
@@ -11,10 +12,14 @@ use winit::{
 mod camera;
 mod scene;
 mod state;
+mod ui;
 
 pub use camera::{Camera, CameraController};
 pub use scene::{Scene, Vertex};
 pub use state::State;
+pub use ui::{EguiRenderState, UIState};
+
+use crate::Simulation;
 
 pub fn render_texture(
     image_dir: std::path::PathBuf,
@@ -33,7 +38,7 @@ pub fn render_texture(
     for i in 0..num_frames {
         let verticies = rx.recv().expect("Failed to recieve verts");
         state.update(&mut scene, &verticies);
-        state.render(&scene).expect("Swapchain error");
+        state.render(&scene, None).expect("Swapchain error");
 
         block_on(async {
             let buffer_slice = state.get_buffer().unwrap().slice(..);
@@ -71,78 +76,252 @@ pub fn render_texture(
     Ok(())
 }
 
-pub fn open_window(rx: Receiver<Vec<Vertex>>) -> Result<(), RecvError> {
-    let event_loop = EventLoop::new();
+/// A custom event type for the winit app.
+enum CustomEvent {
+    RequestRedraw,
+}
+
+/// This is the repaint signal type that egui needs for requesting a repaint from another thread.
+/// It sends the custom RequestRedraw event to the winit event loop.
+struct RepaintSignal(std::sync::Mutex<winit::event_loop::EventLoopProxy<CustomEvent>>);
+
+impl epi::RepaintSignal for RepaintSignal {
+    fn request_repaint(&self) {
+        self.0
+            .lock()
+            .unwrap()
+            .send_event(CustomEvent::RequestRedraw)
+            .ok();
+    }
+}
+
+pub fn open_window() -> Result<(), RecvError> {
+    let event_loop = EventLoop::with_user_event();
+    let mut size = PhysicalSize::new(1280, 720);
     let window = WindowBuilder::new()
-        .with_inner_size(PhysicalSize::new(1280, 720))
+        .with_inner_size(size)
         .with_title("Fluid Simulation")
         .build(&event_loop)
         .unwrap();
 
     let mut state = block_on(State::from_window(&window));
 
-    let size = window.inner_size();
-    let verticies = rx.recv()?;
+    // -------------- EGUI Stuff -----------------
+    //
+    //
+    let mut platform =
+        egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
+            physical_width: size.width,
+            physical_height: size.height,
+            scale_factor: window.scale_factor(),
+            font_definitions: egui::FontDefinitions::default(),
+            style: egui::Style::default(),
+        });
+    let mut egui_render_pass = RenderPass::new(&state.device, wgpu::TextureFormat::Bgra8UnormSrgb);
+
+    let repaint_signal = std::sync::Arc::new(RepaintSignal(std::sync::Mutex::new(
+        event_loop.create_proxy(),
+    )));
+
+    let mut ui_state = UIState::default();
+    // -------------------------------------------
+
+    let verticies = Vec::new();
     let mut scene = Scene::new(&verticies, &state.device, (size.width, size.height));
 
-    let mut last_render_time = std::time::Instant::now();
+    let start_time = std::time::Instant::now();
+    let mut last_render_time = start_time;
     let mut frame_count = 0;
 
-    event_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            ref event,
-            window_id,
-        } if window_id == window.id() => match event {
-            WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-            WindowEvent::KeyboardInput { input, .. } => match input {
-                KeyboardInput {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                    ..
-                } => *control_flow = ControlFlow::Exit,
-                _ => {
-                    state.input(event, &mut scene);
+    let mut rx = None;
+
+    event_loop.run(move |event, _, control_flow| {
+        platform.handle_event(&event);
+
+        match event {
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == window.id() => match event {
+                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                WindowEvent::KeyboardInput { input, .. } => match input {
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        ..
+                    } => *control_flow = ControlFlow::Exit,
+                    _ => {
+                        state.input(event, &mut scene);
+                    }
+                },
+                WindowEvent::Resized(physical_size) => {
+                    size = *physical_size;
+                    state.resize(*physical_size);
+                }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    size = **new_inner_size;
+                    state.resize(**new_inner_size);
+                }
+                window_event => {
+                    // TODO: figure out what to do with this bool
+                    //       basically, make a better input system in general
+                    state.input(window_event, &mut scene);
                 }
             },
-            WindowEvent::Resized(physical_size) => {
-                state.resize(*physical_size);
-            }
-            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                // new_inner_size is &&mut so we have to dereference it twice
-                state.resize(**new_inner_size);
-            }
-            window_event => {
-                // TODO: figure out what to do with this bool
-                //       basically, make a better input system in general
-                state.input(window_event, &mut scene);
-            }
-        },
-        Event::RedrawRequested(_) => {
-            let now = std::time::Instant::now();
-            let dt = now - last_render_time;
-            last_render_time = now;
-            frame_count += 1;
-            if frame_count % 100 == 0 {
-                println!("Running at {:?} FPS", 1_000_000 / dt.as_micros())
-            }
+            Event::RedrawRequested(_) => {
+                let now = std::time::Instant::now();
+                let dt = now - last_render_time;
+                last_render_time = now;
+                frame_count += 1;
+                if frame_count % 100 == 0 {
+                    println!("Running at {:?} FPS", 1_000_000 / dt.as_micros())
+                }
 
-            let verticies = rx.recv().expect("Failed to recieve verts");
-            state.update(&mut scene, &verticies);
-            match state.render(&scene) {
-                Ok(_) => {}
-                // Recreate the swap_chain if lost
-                Err(wgpu::SwapChainError::Lost) => state.resize(state.size),
-                // The system is out of memory, we should probably quit
-                Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                // All other errors (Outdated, Timeout) should be resolved by the next frame
-                Err(e) => eprintln!("{:?}", e),
+                platform.update_time(start_time.elapsed().as_secs_f64());
+                // Get swapchain output frame
+                //let egui_start = Instant::now();
+                platform.begin_frame();
+                let mut app_output = epi::backend::AppOutput::default();
+
+                let mut frame = epi::backend::FrameBuilder {
+                    info: epi::IntegrationInfo {
+                        web_info: None,
+                        cpu_usage: None,
+                        seconds_since_midnight: None,
+                        native_pixels_per_point: Some(window.scale_factor() as _),
+                    },
+                    tex_allocator: &mut egui_render_pass,
+                    output: &mut app_output,
+                    repaint_signal: repaint_signal.clone(),
+                }
+                .build();
+
+                let mut should_start_simulation = false;
+                ui_state.egui_update(platform.context(), &mut frame, &mut should_start_simulation);
+
+                if should_start_simulation && rx.is_none() {
+                    rx = Some(start_simulation(&ui_state.algorithm));
+                }
+
+                let (_output, paint_commands) = platform.end_frame();
+                let paint_jobs = platform.context().tessellate(paint_commands);
+
+                let egui_state = EguiRenderState {
+                    platform: &platform,
+                    render_pass: &mut egui_render_pass,
+                    paint_jobs: &paint_jobs,
+                    screen_descriptor: egui_wgpu_backend::ScreenDescriptor {
+                        physical_width: size.width,
+                        physical_height: size.height,
+                        scale_factor: window.scale_factor() as f32,
+                    },
+                };
+
+                let verticies = if let Some(rx) = &rx {
+                    rx.recv().expect("Failed to recieve verts")
+                } else {
+                    Vec::new()
+                };
+
+                state.update(&mut scene, &verticies);
+
+                match state.render(&scene, Some(egui_state)) {
+                    Ok(_) => {}
+                    // Recreate the swap_chain if lost
+                    Err(wgpu::SwapChainError::Lost) => state.resize(state.size),
+                    // The system is out of memory, we should probably quit
+                    Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    // All other errors (Outdated, Timeout) should be resolved by the next frame
+                    Err(e) => eprintln!("{:?}", e),
+                }
+
+                *control_flow = ControlFlow::Poll;
+            }
+            Event::MainEventsCleared | Event::UserEvent(CustomEvent::RequestRedraw) => {
+                // RedrawRequested will only trigger once, unless we manually
+                // request it.
+                window.request_redraw();
+            }
+            _ => {}
+        }
+    });
+}
+
+fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
+    match algorithm {
+        ui::Algorithm::Mpm(params) => {
+            match &params.constitutive_model {
+                ui::ConstituveModels::NeoHookean(nh) => {
+                    println!("Simulating MPM w/ NeoHookean Model: {:?}", nh);
+                    start_simulation_helper::<crate::MpmSimulation<crate::mpm::NeoHookean>>(
+                        // Would be very nice to use type-changing struct update
+                        // syntax (https://github.com/rust-lang/rfcs/pull/2528) here, but alas, its not stable yet
+                        crate::MpmParameters {
+                            num_particles: params.num_particles,
+                            h: params.h,
+                            bounds: params.bounds.clone(),
+                            delta_time: params.delta_time,
+                            transfer_scheme: params.transfer_scheme,
+                            constitutive_model: nh.clone(),
+                        },
+                    )
+                }
+
+                ui::ConstituveModels::NewtonianFluid(nf) => {
+                    println!("Simulating MPM w/ Newtonian Fluid Model: {:?}", nf);
+                    start_simulation_helper::<crate::MpmSimulation<crate::mpm::NewtonianFluid>>(
+                        crate::MpmParameters {
+                            num_particles: params.num_particles,
+                            h: params.h,
+                            bounds: params.bounds.clone(),
+                            delta_time: params.delta_time,
+                            transfer_scheme: params.transfer_scheme,
+                            constitutive_model: nf.clone(),
+                        },
+                    )
+                }
+
+                ui::ConstituveModels::FixedCorotated(fc) => {
+                    println!("Simulating MPM w/ FixedCorotated Model: {:?}", fc);
+                    start_simulation_helper::<crate::MpmSimulation<crate::mpm::FixedCorotated>>(
+                        crate::MpmParameters {
+                            num_particles: params.num_particles,
+                            h: params.h,
+                            bounds: params.bounds.clone(),
+                            delta_time: params.delta_time,
+                            transfer_scheme: params.transfer_scheme,
+                            constitutive_model: fc.clone(),
+                        },
+                    )
+                }
             }
         }
-        Event::MainEventsCleared => {
-            // RedrawRequested will only trigger once, unless we manually
-            // request it.
-            window.request_redraw();
+        ui::Algorithm::Sph(params) => {
+            start_simulation_helper::<crate::SphSimulation>(params.clone())
         }
-        _ => {}
+    }
+}
+
+fn start_simulation_helper<S: Simulation + 'static>(
+    params: S::Parameters,
+) -> Receiver<Vec<Vertex>> {
+    let mut s = S::new(params);
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    use crate::initial_condition::InitialCondition;
+    crate::initial_condition::Sphere::default().add_particles(&mut s);
+
+    // TODO: Get this to work
+    //println!(
+    //"Running simulation with {:?} particles",
+    //s.params.num_particles
+    //);
+
+    std::thread::spawn(move || loop {
+        let verts = s.simulate_frame();
+
+        tx.send(verts).unwrap();
     });
+
+    rx
 }

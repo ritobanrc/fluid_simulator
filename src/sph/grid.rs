@@ -1,5 +1,5 @@
-use cgmath::{vec3, Vector3};
 use itertools::iproduct;
+use na::Vector3;
 use smallvec::SmallVec;
 use std::ops::{Index, IndexMut};
 
@@ -22,7 +22,7 @@ impl Grid {
         Grid {
             // TODO: Figure out if this is wasting a bunch of memory
             grid: vec![GridCell::new(); width * height * depth],
-            bounds: vec3(width, height, depth),
+            bounds: Vector3::new(width, height, depth),
         }
     }
 
@@ -34,13 +34,13 @@ impl Grid {
         self[coord].push(index);
     }
 
-    pub fn get_neighbors<'a>(&'a self, coord: Coord) -> impl Iterator<Item = usize> + Clone + 'a {
+    pub fn get_neighbors(&self, coord: Coord) -> impl Iterator<Item = usize> + Clone + '_ {
         iproduct!(
             coord.x.saturating_sub(1)..=coord.x + 1,
             coord.y.saturating_sub(1)..=coord.y + 1,
             coord.z.saturating_sub(1)..=coord.z + 1
         )
-        .filter_map(move |(x, y, z)| self.get(vec3(x, y, z)))
+        .filter_map(move |(x, y, z)| self.get(Vector3::new(x, y, z)))
         .flat_map(|cell| cell.iter().copied())
     }
 
