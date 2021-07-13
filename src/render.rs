@@ -200,7 +200,7 @@ pub fn open_window() -> Result<(), RecvError> {
                 ui_state.egui_update(platform.context(), &mut frame, &mut should_start_simulation);
 
                 if should_start_simulation && rx.is_none() {
-                    rx = Some(start_simulation(&ui_state.algorithm));
+                    rx = Some(start_simulation(&ui_state));
                 }
 
                 let (_output, paint_commands) = platform.end_frame();
@@ -247,8 +247,8 @@ pub fn open_window() -> Result<(), RecvError> {
     });
 }
 
-fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
-    match algorithm {
+fn start_simulation(ui_state: &ui::UIState) -> Receiver<Vec<Vertex>> {
+    match &ui_state.algorithm {
         ui::Algorithm::Mpm(params) => {
             match &params.constitutive_model {
                 ui::ConstituveModels::NeoHookean(nh) => {
@@ -264,6 +264,7 @@ fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
                             transfer_scheme: params.transfer_scheme,
                             constitutive_model: nh.clone(),
                         },
+                        &ui_state.initial_condition,
                     )
                 }
 
@@ -278,6 +279,7 @@ fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
                             transfer_scheme: params.transfer_scheme,
                             constitutive_model: nf.clone(),
                         },
+                        &ui_state.initial_condition,
                     )
                 }
 
@@ -292,24 +294,27 @@ fn start_simulation(algorithm: &ui::Algorithm) -> Receiver<Vec<Vertex>> {
                             transfer_scheme: params.transfer_scheme,
                             constitutive_model: fc.clone(),
                         },
+                        &ui_state.initial_condition,
                     )
                 }
             }
         }
-        ui::Algorithm::Sph(params) => {
-            start_simulation_helper::<crate::SphSimulation>(params.clone())
-        }
+        ui::Algorithm::Sph(params) => start_simulation_helper::<crate::SphSimulation>(
+            params.clone(),
+            &ui_state.initial_condition,
+        ),
     }
 }
 
 fn start_simulation_helper<S: Simulation + 'static>(
     params: S::Parameters,
+    initial_condition: &ui::InitialConditions,
 ) -> Receiver<Vec<Vertex>> {
     let mut s = S::new(params);
     let (tx, rx) = std::sync::mpsc::channel();
 
     use crate::initial_condition::InitialCondition;
-    crate::initial_condition::Sphere::default().add_particles(&mut s);
+    initial_condition.add_particles(&mut s);
 
     // TODO: Get this to work
     //println!(

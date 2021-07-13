@@ -1,8 +1,9 @@
 use std::fmt::Display;
 
-use egui::{ComboBox, Ui};
+use egui::{DragValue, Ui, Widget};
 
 use crate::{
+    initial_condition::{Block, InitialCondition, Sphere},
     mpm::{
         parameters::{FixedCorotated, NeoHookean, NewtonianFluid},
         MpmParameters,
@@ -13,6 +14,7 @@ use crate::{
 #[derive(Default)]
 pub struct UIState {
     pub(super) algorithm: Algorithm,
+    pub(super) initial_condition: InitialConditions,
 }
 
 #[derive(Clone, Debug)]
@@ -36,6 +38,13 @@ impl PartialEq for Algorithm {
 
 impl EguiInspector for Algorithm {
     fn egui_update(&mut self, ui: &mut Ui) {
+        ui.heading("Algorithm");
+
+        ui.selectable_value(self, Algorithm::Sph(SphParamaters::default()), "Sph");
+        ui.selectable_value(self, Algorithm::Mpm(MpmParameters::default()), "Mpm");
+
+        ui.end_row();
+
         match self {
             Algorithm::Mpm(params) => params.egui_update(ui),
             Algorithm::Sph(params) => params.egui_update(ui),
@@ -52,6 +61,80 @@ impl Display for Algorithm {
     }
 }
 
+pub(super) enum InitialConditions {
+    Block(crate::initial_condition::Block),
+    Sphere(crate::initial_condition::Sphere),
+}
+
+impl InitialCondition for InitialConditions {
+    fn add_particles<S: crate::Simulation>(&self, s: &mut S) {
+        match self {
+            InitialConditions::Block(a) => a.add_particles(s),
+            InitialConditions::Sphere(a) => a.add_particles(s),
+        }
+    }
+}
+
+impl Default for InitialConditions {
+    fn default() -> Self {
+        InitialConditions::Block(Block::default())
+    }
+}
+
+impl PartialEq for InitialConditions {
+    fn eq(&self, other: &Self) -> bool {
+        use InitialConditions::*;
+        matches!((self, other), (Block(_), Block(_)) | (Sphere(_), Sphere(_)))
+    }
+}
+
+impl EguiInspector for InitialConditions {
+    fn egui_update(&mut self, ui: &mut Ui) {
+        ui.heading("Initial Condition");
+
+        ui.selectable_value(self, InitialConditions::Block(Block::default()), "Block");
+        ui.selectable_value(self, InitialConditions::Sphere(Sphere::default()), "Sphere");
+        ui.end_row();
+
+        match self {
+            Self::Block(a) => a.egui_update(ui),
+            Self::Sphere(a) => a.egui_update(ui),
+        }
+    }
+}
+
+impl EguiInspector for Block {
+    fn egui_update(&mut self, ui: &mut Ui) {
+        ui.label("Size: ");
+        ui.end_row();
+        self.size.egui_update(ui);
+
+        ui.label("Spacing: ");
+        DragValue::new(&mut self.spacing).speed(0.01).ui(ui);
+        ui.end_row();
+
+        ui.label("Jitter: ");
+        self.jitter.egui_update(ui);
+        ui.end_row();
+    }
+}
+
+impl EguiInspector for Sphere {
+    fn egui_update(&mut self, ui: &mut Ui) {
+        ui.label("Number of Particles: ");
+        DragValue::new(&mut self.num_particles).speed(10).ui(ui);
+        ui.end_row();
+
+        ui.label("Center: ");
+        self.center.egui_update(ui);
+        ui.end_row();
+
+        ui.label("Radius: ");
+        DragValue::new(&mut self.radius).speed(0.05).ui(ui);
+        ui.end_row();
+    }
+}
+
 impl UIState {
     pub fn egui_update(
         &mut self,
@@ -64,22 +147,11 @@ impl UIState {
                 .striped(true)
                 .spacing([40., 4.])
                 .show(ui, |ui| {
-                    ComboBox::from_label("")
-                        .selected_text(format!("{}", self.algorithm))
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(
-                                &mut self.algorithm,
-                                Algorithm::Mpm(MpmParameters::default()),
-                                "Mpm",
-                            );
+                    ui.end_row();
 
-                            ui.selectable_value(
-                                &mut self.algorithm,
-                                Algorithm::Sph(SphParamaters::default()),
-                                "Sph",
-                            );
-                        });
+                    self.initial_condition.egui_update(ui);
 
+                    ui.separator();
                     ui.end_row();
 
                     self.algorithm.egui_update(ui);
@@ -150,7 +222,8 @@ impl<CM: EguiInspector> EguiInspector for MpmParameters<CM> {
 
         ui.separator();
         ui.end_row();
-        ui.label("Transfer Scheme");
+
+        ui.heading("Transfer Scheme");
         ui.end_row();
         ui.radio_value(&mut self.transfer_scheme, TransferScheme::PIC, "PIC");
         ui.end_row();
@@ -225,6 +298,9 @@ impl Display for ConstituveModels {
 impl EguiInspector for ConstituveModels {
     fn egui_update(&mut self, ui: &mut Ui) {
         ui.separator();
+        ui.end_row();
+
+        ui.heading("Constitutive Model");
         ui.end_row();
 
         ui.selectable_value(

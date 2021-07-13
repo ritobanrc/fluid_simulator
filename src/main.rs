@@ -48,7 +48,7 @@ fn main() {
 
         let params = MpmParameters::<mpm::NeoHookean>::default();
         let mut s = MpmSimulation::new(params);
-        crate::initial_condition::Block.add_particles(&mut s);
+        crate::initial_condition::Block::default().add_particles(&mut s);
 
         println!(
             "Running simulation with {:?} particles",

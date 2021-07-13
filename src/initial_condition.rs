@@ -1,42 +1,48 @@
-use crate::{Simulation, Vec3};
-use num::{Float, FromPrimitive};
+use crate::{Scalar, Simulation, Vec3};
+use itertools::iproduct;
+use na::Vector3;
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use std::ops::Range;
 
 pub trait InitialCondition {
     fn add_particles<S: Simulation>(&self, s: &mut S);
 }
 
-pub struct Block;
+pub struct Block {
+    pub size: Range<Vec3>,
+    pub spacing: Scalar,
+    pub jitter: Vec3,
+}
 
-fn linspace<T>(start: T, stop: T, num_steps: usize) -> impl Iterator<Item = T>
-where
-    T: Float + FromPrimitive,
-{
-    let delta: T = (stop - start) / T::from_usize(num_steps - 1).expect("out of range");
-    (0..num_steps).map(move |i| start + T::from_usize(i).expect("out of range") * delta)
+impl Default for Block {
+    fn default() -> Self {
+        Block {
+            size: Vec3::from_element(0.5)..Vec3::from_element(1.5),
+            spacing: 0.05,
+            jitter: Vec3::from_element(0.05 / 8.),
+        }
+    }
 }
 
 impl InitialCondition for Block {
     fn add_particles<S: Simulation>(&self, s: &mut S) {
         let mut rng = StdRng::from_seed([0; 32]);
-        let h = 0.05; // TODO: Get this form simulation or smth
 
-        // Block scenario
-        // TODO: Don't hardcode all these numbers, make them possible to set from the gui
-        for x in linspace(0.5, 1.5, (1. / h) as usize) {
-            for y in linspace(0.5, 1.5, (1. / h) as usize) {
-                for z in linspace(0.5, 1.5, (1. / h) as usize) {
-                    let jitter_x = rng.gen::<f64>() * h / 8. - h / 16.;
-                    let jitter_z = rng.gen::<f64>() * h / 8. - h / 16.;
+        let min = self.size.start;
+        let max = self.size.end;
 
-                    let velocity = [0., 0., 0.];
-                    //rng.gen::<f64>() * 2. - 1.,
-                    //rng.gen::<f64>() * 2. - 1.,
-                    //rng.gen::<f64>() * 2. - 1.,
-                    //];
-                    s.add_particle([x + jitter_x, y, z + jitter_z].into(), velocity.into());
-                }
-            }
+        let counts = ((max - min) / self.spacing).map(|x| x.ceil() as usize);
+
+        for (i, j, k) in iproduct!(0..counts.x, 0..counts.y, 0..counts.z) {
+            let idx = Vector3::new(i, j, k);
+            let pos = idx.cast::<Scalar>() * self.spacing + min;
+
+            let rand: Vec3 = rng.gen::<[Scalar; 3]>().into();
+            let jitter = rand.component_mul(&self.jitter) - self.jitter / 2.;
+
+            let pos = pos + jitter;
+
+            s.add_particle(pos, Vector3::zeros());
         }
     }
 }
