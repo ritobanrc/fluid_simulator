@@ -141,6 +141,7 @@ impl UIState {
         ctx: egui::CtxRef,
         _frame: &mut epi::Frame,
         start_simulation: &mut bool,
+        stop_tx: &Option<std::sync::mpsc::Sender<()>>,
     ) {
         egui::SidePanel::left("My Window", 200.).show(&ctx, |ui| {
             egui::Grid::new("side-panel-grid")
@@ -165,8 +166,12 @@ impl UIState {
                     *start_simulation = true;
                 }
 
-                if ui.button("Reset").clicked() {
-                    eprintln!("Not implemented yet");
+                if let Some(stop_tx) = stop_tx {
+                    if ui.button("Stop").clicked() {
+                        stop_tx
+                            .send(())
+                            .expect("Channel to Simulation failed to send.");
+                    }
                 }
             });
         });

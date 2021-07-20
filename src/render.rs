@@ -135,6 +135,8 @@ pub fn open_window() -> Result<(), RecvError> {
 
     let mut rx = None;
 
+    let mut stop_tx = None;
+
     event_loop.run(move |event, _, control_flow| {
         platform.handle_event(&event);
 
@@ -197,10 +199,17 @@ pub fn open_window() -> Result<(), RecvError> {
                 .build();
 
                 let mut should_start_simulation = false;
-                ui_state.egui_update(platform.context(), &mut frame, &mut should_start_simulation);
+                ui_state.egui_update(
+                    platform.context(),
+                    &mut frame,
+                    &mut should_start_simulation,
+                    &stop_tx,
+                );
 
                 if should_start_simulation && rx.is_none() {
-                    rx = Some(start_simulation(&ui_state));
+                    let (new_stop_tx, new_stop_rx) = std::sync::mpsc::channel();
+                    stop_tx = Some(new_stop_tx);
+                    rx = Some(start_simulation(&ui_state, new_stop_rx));
                 }
 
                 let (_output, paint_commands) = platform.end_frame();
@@ -217,8 +226,14 @@ pub fn open_window() -> Result<(), RecvError> {
                     },
                 };
 
-                let verticies = if let Some(rx) = &rx {
-                    rx.recv().expect("Failed to recieve verts")
+                let verticies = if let Some(this_rx) = &rx {
+                    match this_rx.recv() {
+                        Ok(verts) => verts,
+                        Err(_) => {
+                            rx = None;
+                            Vec::new()
+                        }
+                    }
                 } else {
                     Vec::new()
                 };
@@ -247,7 +262,7 @@ pub fn open_window() -> Result<(), RecvError> {
     });
 }
 
-fn start_simulation(ui_state: &ui::UIState) -> Receiver<Vec<Vertex>> {
+fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<Vec<Vertex>> {
     match &ui_state.algorithm {
         ui::Algorithm::Mpm(params) => {
             match &params.constitutive_model {
@@ -265,6 +280,7 @@ fn start_simulation(ui_state: &ui::UIState) -> Receiver<Vec<Vertex>> {
                             constitutive_model: nh.clone(),
                         },
                         &ui_state.initial_condition,
+                        stop_rx,
                     )
                 }
 
@@ -280,6 +296,7 @@ fn start_simulation(ui_state: &ui::UIState) -> Receiver<Vec<Vertex>> {
                             constitutive_model: nf.clone(),
                         },
                         &ui_state.initial_condition,
+                        stop_rx,
                     )
                 }
 
@@ -295,6 +312,7 @@ fn start_simulation(ui_state: &ui::UIState) -> Receiver<Vec<Vertex>> {
                             constitutive_model: fc.clone(),
                         },
                         &ui_state.initial_condition,
+                        stop_rx,
                     )
                 }
             }
@@ -302,6 +320,7 @@ fn start_simulation(ui_state: &ui::UIState) -> Receiver<Vec<Vertex>> {
         ui::Algorithm::Sph(params) => start_simulation_helper::<crate::SphSimulation>(
             params.clone(),
             &ui_state.initial_condition,
+            stop_rx,
         ),
     }
 }
@@ -309,6 +328,7 @@ fn start_simulation(ui_state: &ui::UIState) -> Receiver<Vec<Vertex>> {
 fn start_simulation_helper<S: Simulation + 'static>(
     params: S::Parameters,
     initial_condition: &ui::InitialConditions,
+    stop_rx: Receiver<()>,
 ) -> Receiver<Vec<Vertex>> {
     let mut s = S::new(params);
     let (tx, rx) = std::sync::mpsc::channel();
@@ -326,6 +346,18 @@ fn start_simulation_helper<S: Simulation + 'static>(
         let verts = s.simulate_frame();
 
         tx.send(verts).unwrap();
+
+        match stop_rx.try_recv() {
+            Ok(()) => {
+                println!("Stopping simulation.");
+                return;
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                eprintln!("Main thread disconnected.");
+                return;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => continue,
+        }
     });
 
     rx
