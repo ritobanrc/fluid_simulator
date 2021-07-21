@@ -111,7 +111,10 @@ impl EguiInspector for Block {
         self.size.egui_update(ui);
 
         ui.label("Spacing: ");
-        DragValue::new(&mut self.spacing).speed(0.01).ui(ui);
+        DragValue::new(&mut self.spacing)
+            .speed(0.01)
+            .clamp_range(0. ..=1.)
+            .ui(ui);
         ui.end_row();
 
         ui.label("Jitter: ");
