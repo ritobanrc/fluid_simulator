@@ -131,7 +131,6 @@ pub fn open_window() -> Result<(), RecvError> {
 
     let start_time = std::time::Instant::now();
     let mut last_render_time = start_time;
-    let mut frame_count = 0;
 
     let mut rx = None;
 
@@ -174,10 +173,8 @@ pub fn open_window() -> Result<(), RecvError> {
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
-                frame_count += 1;
-                if frame_count % 100 == 0 {
-                    println!("Running at {:?} FPS", 1_000_000 / dt.as_micros())
-                }
+
+                ui_state.dt = dt;
 
                 platform.update_time(start_time.elapsed().as_secs_f64());
                 // Get swapchain output frame
@@ -230,6 +227,7 @@ pub fn open_window() -> Result<(), RecvError> {
                     match this_rx.recv() {
                         Ok(verts) => verts,
                         Err(_) => {
+                            stop_tx = None;
                             rx = None;
                             Vec::new()
                         }
@@ -267,7 +265,8 @@ pub fn open_window() -> Result<(), RecvError> {
 }
 
 #[derive(Default)]
-/// An empty simulation only used for displaying the particles' initial condition
+/// An empty simulation only used for displaying the particles' initial condition before the main
+/// simulation starts
 struct NopSimulation {
     vertices: Vec<Vertex>,
 }

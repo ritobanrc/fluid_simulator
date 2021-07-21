@@ -15,6 +15,7 @@ use crate::{
 pub struct UIState {
     pub(super) algorithm: Algorithm,
     pub(super) initial_condition: InitialConditions,
+    pub(super) dt: std::time::Duration,
 }
 
 #[derive(Clone, Debug)]
@@ -156,24 +157,33 @@ impl UIState {
                     ui.end_row();
 
                     self.algorithm.egui_update(ui);
+
+                    let mut fps = 1_000_000 / self.dt.as_micros() as u64;
+                    ui.add(egui::Label::new("FPS").heading());
+                    ui.add(egui::DragValue::new(&mut fps));
+
+                    ui.end_row();
                 });
 
             ui.separator();
             ui.end_row();
 
             ui.vertical_centered_justified(|ui| {
-                if ui.button("Play").clicked() {
+                if ui.button("Start Simulation").clicked() {
                     *start_simulation = true;
                 }
 
                 if let Some(stop_tx) = stop_tx {
-                    if ui.button("Stop").clicked() {
+                    if ui.button("Stop Simulation").clicked() {
                         stop_tx
                             .send(())
                             .expect("Channel to Simulation failed to send.");
                     }
                 }
             });
+
+            ui.separator();
+            ui.end_row();
         });
     }
 }
@@ -197,14 +207,12 @@ impl<T: egui::math::Numeric + na::Scalar, D: na::Dim, S: na::storage::StorageMut
 
 impl<T: EguiInspector> EguiInspector for std::ops::Range<T> {
     fn egui_update(&mut self, ui: &mut Ui) {
-        ui.add_space(10.);
-        ui.label("Min");
+        ui.label("\tMin");
         self.start.egui_update(ui);
 
         ui.end_row();
 
-        ui.add_space(10.);
-        ui.label("Max");
+        ui.label("\tMax");
         self.end.egui_update(ui);
         ui.end_row();
     }
