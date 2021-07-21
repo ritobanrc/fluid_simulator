@@ -32,12 +32,12 @@ pub fn render_texture(
 
     let start = Instant::now();
 
-    let verticies = rx.recv()?;
-    let mut scene = Scene::new(&verticies, &state.device, (width, height));
+    let vertices = rx.recv()?;
+    let mut scene = Scene::new(&vertices, &state.device, (width, height));
 
     for i in 0..num_frames {
-        let verticies = rx.recv().expect("Failed to recieve verts");
-        state.update(&mut scene, &verticies);
+        let vertices = rx.recv().expect("Failed to recieve verts");
+        state.update(&mut scene, &vertices);
         state.render(&scene, None).expect("Swapchain error");
 
         block_on(async {
@@ -226,7 +226,7 @@ pub fn open_window() -> Result<(), RecvError> {
                     },
                 };
 
-                let verticies = if let Some(this_rx) = &rx {
+                let vertices = if let Some(this_rx) = &rx {
                     match this_rx.recv() {
                         Ok(verts) => verts,
                         Err(_) => {
@@ -235,10 +235,14 @@ pub fn open_window() -> Result<(), RecvError> {
                         }
                     }
                 } else {
-                    Vec::new()
+                    use crate::initial_condition::InitialCondition;
+                    let mut nop = NopSimulation::default();
+                    ui_state.initial_condition.add_particles(&mut nop);
+
+                    nop.vertices
                 };
 
-                state.update(&mut scene, &verticies);
+                state.update(&mut scene, &vertices);
 
                 match state.render(&scene, Some(egui_state)) {
                     Ok(_) => {}
@@ -260,6 +264,35 @@ pub fn open_window() -> Result<(), RecvError> {
             _ => {}
         }
     });
+}
+
+#[derive(Default)]
+/// An empty simulation only used for displaying the particles' initial condition
+struct NopSimulation {
+    vertices: Vec<Vertex>,
+}
+
+impl Simulation for NopSimulation {
+    type Parameters = ();
+
+    fn new(_params: Self::Parameters) -> Self {
+        NopSimulation {
+            vertices: Vec::new(),
+        }
+    }
+
+    fn simulate_frame(&mut self) -> Vec<Vertex> {
+        panic!("NopSimulation::simulate_frame should never be called");
+    }
+
+    fn add_particle(&mut self, position: crate::Vec3, velocity: crate::Vec3) {
+        let vel = velocity.magnitude_squared() as f32;
+        let pos = position.cast();
+        self.vertices.push(Vertex {
+            position: [pos.x, pos.y, pos.z],
+            color: [vel, 0.5 * vel + 0.5, 1.],
+        });
+    }
 }
 
 fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<Vec<Vertex>> {

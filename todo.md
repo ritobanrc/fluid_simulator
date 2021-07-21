@@ -1,6 +1,6 @@
 # Next Steps
 
-* Reset Button
+* [X] Reset Button  
 * JSON Serialization/Deserialization of settings
 * Partio/VTK input/output
 * Fix APIC Stability issue (invertibility?)
