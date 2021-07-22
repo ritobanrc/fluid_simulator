@@ -1,4 +1,4 @@
-use na::{Point3, Vector3};
+use na::{Point3, Vector2, Vector3};
 
 #[derive(Debug)]
 pub struct Camera {
@@ -47,100 +47,106 @@ impl Camera {
 
 pub struct CameraController {
     speed: f32,
-    is_up_pressed: bool,
-    is_down_pressed: bool,
-    is_forward_pressed: bool,
-    is_backward_pressed: bool,
-    is_left_pressed: bool,
-    is_right_pressed: bool,
+    zoom: f32,
+    middle_mouse: bool,
+    shift: bool,
+    delta: Vector2<f32>,
 }
 
 impl CameraController {
     pub fn new(speed: f32) -> Self {
         Self {
             speed,
-            is_up_pressed: false,
-            is_down_pressed: false,
-            is_forward_pressed: false,
-            is_backward_pressed: false,
-            is_left_pressed: false,
-            is_right_pressed: false,
+            zoom: 0.,
+            middle_mouse: false,
+            shift: false,
+            delta: Vector2::zeros(),
         }
     }
 
-    pub fn process_events(&mut self, event: &winit::event::WindowEvent) -> bool {
-        use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
+    pub fn process_events(&mut self, event: &winit::event::DeviceEvent) -> bool {
+        use winit::event::{DeviceEvent, KeyboardInput, MouseScrollDelta};
         match event {
-            WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        state,
-                        virtual_keycode: Some(keycode),
-                        ..
-                    },
-                ..
-            } => {
-                let is_pressed = *state == ElementState::Pressed;
-                match keycode {
-                    VirtualKeyCode::Space => {
-                        self.is_up_pressed = is_pressed;
-                        true
-                    }
-                    VirtualKeyCode::LShift => {
-                        self.is_down_pressed = is_pressed;
-                        true
-                    }
-                    VirtualKeyCode::W | VirtualKeyCode::Up => {
-                        self.is_forward_pressed = is_pressed;
-                        true
-                    }
-                    VirtualKeyCode::A | VirtualKeyCode::Left => {
-                        self.is_left_pressed = is_pressed;
-                        true
-                    }
-                    VirtualKeyCode::S | VirtualKeyCode::Down => {
-                        self.is_backward_pressed = is_pressed;
-                        true
-                    }
-                    VirtualKeyCode::D | VirtualKeyCode::Right => {
-                        self.is_right_pressed = is_pressed;
-                        true
-                    }
-                    _ => false,
+            DeviceEvent::MouseWheel { delta } => {
+                match delta {
+                    MouseScrollDelta::LineDelta(_dx, dy) => self.zoom = *dy * 20., // Naively assume each line is 20 pixels
+                    MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition {
+                        x: _dx,
+                        y: dy,
+                    }) => self.zoom = *dy as f32,
                 }
+                true
             }
+            DeviceEvent::MouseMotion { delta } => {
+                self.delta = Vector2::new(delta.0, delta.1).cast();
+                true
+            }
+            DeviceEvent::Button { button: 2, state } => {
+                match state {
+                    winit::event::ElementState::Pressed => self.middle_mouse = true,
+                    winit::event::ElementState::Released => self.middle_mouse = false,
+                }
+                true
+            }
+            DeviceEvent::Key(KeyboardInput {
+                virtual_keycode: keycode,
+                state,
+                ..
+            }) => match keycode {
+                Some(winit::event::VirtualKeyCode::LShift)
+                | Some(winit::event::VirtualKeyCode::RShift) => {
+                    match state {
+                        winit::event::ElementState::Pressed => self.shift = true,
+                        winit::event::ElementState::Released => self.shift = false,
+                    };
+                    true
+                }
+                _ => false,
+            },
             _ => false,
         }
     }
 
-    pub fn update_camera(&self, camera: &mut Camera) {
+    pub fn update_camera(&mut self, camera: &mut Camera) {
         let forward = camera.target - camera.eye;
         let forward_norm = forward.normalize();
         let forward_mag = forward.magnitude();
 
-        // Prevents glitching when camera gets too close to the
-        // center of the scene.
-        if self.is_forward_pressed && forward_mag > self.speed {
-            camera.eye += forward_norm * self.speed;
-        }
-        if self.is_backward_pressed {
-            camera.eye -= forward_norm * self.speed;
+        // Zoom
+        if self.zoom != 0. && (self.zoom < 0. || forward_mag > self.speed) {
+            camera.eye += self.zoom.signum() * forward_norm * self.speed;
+            self.zoom = 0.; // We've handled it
         }
 
-        let right = forward_norm.cross(&camera.up);
+        if self.middle_mouse {
+            if self.shift {
+                let mut shift = Vector3::zeros();
+                shift += self.delta.y * camera.up;
+                shift -= self.delta.x * camera.up.cross(&-forward);
 
-        // Redo radius calc in case the up/ down is pressed.
-        let forward = camera.target - camera.eye;
-        let forward_mag = forward.magnitude();
+                camera.eye += 0.004 * shift;
+                camera.target += 0.004 * shift;
 
-        if self.is_right_pressed {
-            // Rescale the distance between the target and eye so
-            // that it doesn't change. The eye therefore still
-            // lies on the circle made by the target and eye.
-            camera.eye = camera.target - (forward + right * self.speed).normalize() * forward_mag;
-        }
-        if self.is_left_pressed {
-            camera.eye = camera.target - (forward - right * self.speed).normalize() * forward_mag;
+                self.delta = Vector2::zeros();
+            } else {
+                // Orbit
+                if self.delta.y != 0. {
+                    let axis = na::Unit::new_normalize(camera.up.cross(&-forward));
+                    camera.eye = camera.target
+                        - na::Rotation3::from_axis_angle(&axis, -0.015 * self.delta.y) * forward;
+
+                    self.delta.y = 0.;
+                }
+
+                if self.delta.x != 0. {
+                    let axis = na::Unit::new_normalize(camera.up);
+                    let forward = camera.target - camera.eye; // recalculate in case this was modified by the delta.y path
+                    camera.eye = camera.target
+                        - na::Rotation3::from_axis_angle(&axis, -0.015 * self.delta.x) * forward;
+
+                    self.delta.x = 0.;
+                }
+            }
         }
     }
 }

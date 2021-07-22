@@ -3,7 +3,7 @@ use wgpu::{
     util::DeviceExt, Adapter, Device, Instance, Queue, RenderPipeline, Surface, SwapChain,
     SwapChainDescriptor,
 };
-use winit::event::WindowEvent;
+use winit::event::DeviceEvent;
 use winit::window::Window;
 
 use std::convert::TryInto;
@@ -267,17 +267,13 @@ impl State {
     }
 
     #[allow(clippy::single_match, clippy::collapsible_match)]
-    pub fn input(&mut self, event: &WindowEvent, scene: &mut Scene) -> bool {
+    pub fn input(&mut self, event: &DeviceEvent, scene: &mut Scene) -> bool {
         use winit::event::{KeyboardInput, VirtualKeyCode};
         match event {
-            WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        virtual_keycode: Some(keycode),
-                        ..
-                    },
+            DeviceEvent::Key(KeyboardInput {
+                virtual_keycode: Some(keycode),
                 ..
-            } => match keycode {
+            }) => match keycode {
                 VirtualKeyCode::C => {
                     println!("{:#?}", scene.camera);
                 }

@@ -111,7 +111,10 @@ impl EguiInspector for Block {
         self.size.egui_update(ui);
 
         ui.label("Spacing: ");
-        DragValue::new(&mut self.spacing).speed(0.01).ui(ui);
+        DragValue::new(&mut self.spacing)
+            .speed(0.01)
+            .clamp_range(0. ..=1.)
+            .ui(ui);
         ui.end_row();
 
         ui.label("Jitter: ");
@@ -345,7 +348,7 @@ impl EguiInspector for NeoHookean {
     fn egui_update(&mut self, ui: &mut Ui) {
         ui.label("Young's Modulus: ");
         let response_youngs_modulus =
-            ui.add(egui::Slider::new(&mut self.youngs_modulus, 0. ..=50_000.));
+            ui.add(egui::Slider::new(&mut self.youngs_modulus, 0. ..=10_000.));
         ui.end_row();
 
         ui.label("Poisson's Ratio: ");
