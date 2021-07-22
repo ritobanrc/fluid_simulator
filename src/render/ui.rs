@@ -348,7 +348,7 @@ impl EguiInspector for NeoHookean {
     fn egui_update(&mut self, ui: &mut Ui) {
         ui.label("Young's Modulus: ");
         let response_youngs_modulus =
-            ui.add(egui::Slider::new(&mut self.youngs_modulus, 0. ..=50_000.));
+            ui.add(egui::Slider::new(&mut self.youngs_modulus, 0. ..=10_000.));
         ui.end_row();
 
         ui.label("Poisson's Ratio: ");

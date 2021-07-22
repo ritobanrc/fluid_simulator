@@ -124,8 +124,8 @@ impl CameraController {
                 shift += self.delta.y * camera.up;
                 shift -= self.delta.x * camera.up.cross(&-forward);
 
-                camera.eye += 0.008 * shift;
-                camera.target += 0.008 * shift;
+                camera.eye += 0.004 * shift;
+                camera.target += 0.004 * shift;
 
                 self.delta = Vector2::zeros();
             } else {
