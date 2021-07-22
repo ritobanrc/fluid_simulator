@@ -140,6 +140,9 @@ pub fn open_window() -> Result<(), RecvError> {
         platform.handle_event(&event);
 
         match event {
+            Event::DeviceEvent { event, .. } => {
+                state.input(&event, &mut scene);
+            }
             Event::WindowEvent {
                 ref event,
                 window_id,
@@ -151,9 +154,7 @@ pub fn open_window() -> Result<(), RecvError> {
                         virtual_keycode: Some(VirtualKeyCode::Escape),
                         ..
                     } => *control_flow = ControlFlow::Exit,
-                    _ => {
-                        state.input(event, &mut scene);
-                    }
+                    _ => {}
                 },
                 WindowEvent::Resized(physical_size) => {
                     size = *physical_size;
@@ -163,11 +164,7 @@ pub fn open_window() -> Result<(), RecvError> {
                     size = **new_inner_size;
                     state.resize(**new_inner_size);
                 }
-                window_event => {
-                    // TODO: figure out what to do with this bool
-                    //       basically, make a better input system in general
-                    state.input(window_event, &mut scene);
-                }
+                _ => {}
             },
             Event::RedrawRequested(_) => {
                 let now = std::time::Instant::now();
