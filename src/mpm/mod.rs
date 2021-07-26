@@ -69,15 +69,15 @@ impl<CM> MpmSimulation<CM> {
                 // Eqn. 172, JSTSS Sigraphh 2016 Course Notes
                 *grid.mass_mut(i).unwrap() += particles.mass[p] * weight;
 
-                // Eqn. 128, Course Notes
-                let mut v_adjusted = particles.velocity[p];
+                let mut v_affine = particles.velocity[p];
                 if params.transfer_scheme == TransferScheme::APIC {
+                    let Cp = particles.affine_matrix[p] * Dp_inv;
                     let xi = grid.data.coord_to_pos(i);
                     let xp = particles.position[p];
-                    v_adjusted += particles.affine_matrix[p] * Dp_inv * (xi - xp);
+                    v_affine += Cp * (xi - xp);
                 }
 
-                *grid.momentum_mut(i).unwrap() += weight * particles.mass[p] * v_adjusted;
+                *grid.momentum_mut(i).unwrap() += weight * particles.mass[p] * v_affine;
             })
         }
     }
@@ -91,14 +91,12 @@ impl<CM> MpmSimulation<CM> {
         } = self;
 
         for p in 0..params.num_particles {
-            //let initial_particle_velocity = particles.velocity[p];
-            //particles.velocity[p] = Vector3::zeros();
+            let mut xpic_next_velocity = Vec3::zeros();
+            let mut flip_next_velocity = particles.velocity[p];
+
             if params.transfer_scheme == TransferScheme::APIC {
                 particles.affine_matrix[p] = Matrix3::zeros();
             }
-
-            let mut xpic_next_velocity = Vec3::zeros();
-            let mut flip_next_velocity = particles.velocity[p];
 
             weights.particle_grid_iterator(p).for_each(|(i, weight)| {
                 if cfg!(debug_assertions) && !grid.data.coord_in_grid(i) {
@@ -196,11 +194,11 @@ impl<CM: ConstitutiveModel> MpmSimulation<CM> {
 }
 
 impl<CM> MpmSimulation<CM> {
-    fn update_deformation_gradient(&mut self) {
+    fn update_deformation_gradient(&mut self, delta_time: Scalar) {
         for p in 0..self.params.num_particles {
             // Eqn. 181 Course Notes
             let fact = Matrix3::identity()
-                + self.params.delta_time * {
+                + delta_time * {
                     self.weights
                         .particle_grid_iterator_grad(p)
                         .map(|(i, grad)| self.grid.velocity(i).unwrap() * grad.transpose())
@@ -211,9 +209,9 @@ impl<CM> MpmSimulation<CM> {
         }
     }
 
-    fn advect_particles(&mut self) {
+    fn advect_particles(&mut self, delta_time: Scalar) {
         for p in 0..self.params.num_particles {
-            self.particles.position[p] += self.params.delta_time * self.particles.velocity[p];
+            self.particles.position[p] += delta_time * self.particles.velocity[p];
 
             // TODO: Figure out how to correctly handle these boundary conditions
             update_bounds(
@@ -222,6 +220,25 @@ impl<CM> MpmSimulation<CM> {
                 self.params.bounds.end,
             );
         }
+    }
+
+    fn calculate_cfl(&self) -> Scalar {
+        let mut max_affine_velocity_mag = 0.;
+        let d = 3.;
+        let gamma_over_k_delta_x = 6. * Scalar::sqrt(d) / self.params.h;
+
+        for p in 0..self.params.num_particles {
+            let mut velocity_mag = self.particles.velocity[p].magnitude();
+            if self.params.transfer_scheme == TransferScheme::APIC {
+                velocity_mag += gamma_over_k_delta_x * self.particles.affine_matrix[p].norm();
+            }
+
+            if velocity_mag > max_affine_velocity_mag {
+                max_affine_velocity_mag = velocity_mag;
+            }
+        }
+
+        self.params.h / max_affine_velocity_mag
     }
 }
 
@@ -259,37 +276,53 @@ impl<CM: ConstitutiveModel> Simulation for MpmSimulation<CM> {
     }
 
     fn simulate_frame(&mut self) -> Vec<Vertex> {
-        self.grid.clear_grid();
-        self.precompute_weights();
+        let mut time_simulated = 0.;
+        let mut num_substeps = 0;
 
-        self.particles_to_grid();
+        while time_simulated < self.params.delta_time {
+            self.grid.clear_grid();
+            self.precompute_weights();
 
-        if self.particles.initial_volume.is_empty() {
-            self.calculate_initial_volumes();
+            self.particles_to_grid();
+
+            if self.particles.initial_volume.is_empty() {
+                self.calculate_initial_volumes();
+            }
+
+            if cfg!(debug_assertions) {
+                println!(
+                    "Particle Mass: {:?}, Grid Mass: {:?}",
+                    self.particles.total_mass(),
+                    self.grid.total_mass()
+                );
+
+                println!(
+                    "Particle Momentum: {:?}, Grid Momentum: {:?}",
+                    self.particles.total_momentum(),
+                    self.grid.total_momentum()
+                );
+            }
+
+            self.grid.compute_velocities();
+
+            let mut cfl_dt = 0.8 * self.calculate_cfl();
+            if cfl_dt + time_simulated > self.params.delta_time {
+                cfl_dt = self.params.delta_time - time_simulated;
+            }
+            time_simulated += cfl_dt;
+            println!("CFL Time Step: {:?}", cfl_dt);
+
+            self.compute_forces();
+            self.grid.velocity_update(cfl_dt);
+
+            self.update_deformation_gradient(cfl_dt);
+
+            self.grid_to_particles();
+            self.advect_particles(cfl_dt);
+
+            num_substeps += 1;
         }
-
-        if cfg!(debug_assertions) {
-            println!(
-                "Particle Mass: {:?}, Grid Mass: {:?}",
-                self.particles.total_mass(),
-                self.grid.total_mass()
-            );
-
-            println!(
-                "Particle Momentum: {:?}, Grid Momentum: {:?}",
-                self.particles.total_momentum(),
-                self.grid.total_momentum()
-            );
-        }
-
-        self.grid.compute_velocities();
-        self.compute_forces();
-        self.grid.velocity_update(self.params.delta_time);
-
-        self.update_deformation_gradient();
-
-        self.grid_to_particles();
-        self.advect_particles();
+        println!("Simulated frame with {:?} substeps. ", num_substeps);
 
         self.create_verts()
     }
