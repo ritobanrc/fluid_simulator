@@ -49,9 +49,9 @@ impl Simulation for SphSimulation {
         sph_simulate_frame(self)
     }
 
-    fn add_particle(&mut self, position: Vec3, velocity: Vec3) {
+    fn add_particle(&mut self, mass: Scalar, position: Vec3, velocity: Vec3) {
         let index = self.masses.len();
-        self.masses.push((10. * self.params.h).powi(3));
+        self.masses.push(mass);
         self.positions.push(position);
         self.velocities.push(velocity);
         self.force.push(Vec3::zeros());

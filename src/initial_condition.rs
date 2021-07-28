@@ -9,6 +9,7 @@ pub trait InitialCondition {
 }
 
 pub struct Block {
+    pub total_mass: Scalar,
     pub size: Range<Vec3>,
     pub spacing: Scalar,
     pub jitter: Vec3,
@@ -17,6 +18,7 @@ pub struct Block {
 impl Default for Block {
     fn default() -> Self {
         Block {
+            total_mass: 500.,
             size: Vec3::from_element(0.5)..Vec3::from_element(1.5),
             spacing: 0.05,
             jitter: Vec3::from_element(0.05 / 8.),
@@ -31,7 +33,13 @@ impl InitialCondition for Block {
         let min = self.size.start;
         let max = self.size.end;
 
+        if self.spacing == 0.0 {
+            return;
+        }
+
         let counts = ((max - min) / self.spacing).map(|x| x.ceil() as usize);
+        let num_particles: usize = counts.iter().product();
+        let mass = self.total_mass / num_particles as Scalar;
 
         for (i, j, k) in iproduct!(0..counts.x, 0..counts.y, 0..counts.z) {
             let idx = Vector3::new(i, j, k);
@@ -42,13 +50,14 @@ impl InitialCondition for Block {
 
             let pos = pos + jitter;
 
-            s.add_particle(pos, Vector3::zeros());
+            s.add_particle(mass, pos, Vector3::zeros());
         }
     }
 }
 
 pub struct Sphere {
     pub num_particles: usize,
+    pub total_mass: Scalar,
     pub center: Vec3,
     pub radius: f64,
 }
@@ -57,6 +66,7 @@ impl Default for Sphere {
     fn default() -> Self {
         Sphere {
             num_particles: 5000,
+            total_mass: 500.,
             center: Vec3::new(1., 1., 1.),
             radius: 0.25,
         }
@@ -66,6 +76,7 @@ impl Default for Sphere {
 impl InitialCondition for Sphere {
     fn add_particles<S: Simulation>(&self, s: &mut S) {
         let mut rng = StdRng::from_seed([0; 32]);
+        let mass = self.total_mass / self.num_particles as Scalar;
 
         for _ in 0..self.num_particles {
             let pos = loop {
@@ -77,7 +88,7 @@ impl InitialCondition for Sphere {
                 }
             };
 
-            s.add_particle(pos, Vec3::zeros());
+            s.add_particle(mass, pos, Vec3::zeros());
         }
     }
 }

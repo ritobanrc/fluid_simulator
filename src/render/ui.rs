@@ -120,6 +120,13 @@ impl EguiInspector for Block {
         ui.label("Jitter: ");
         self.jitter.egui_update(ui);
         ui.end_row();
+
+        ui.label("Total Mass: ");
+        DragValue::new(&mut self.total_mass)
+            .speed(0.5)
+            .clamp_range(0. ..=1000.)
+            .ui(ui);
+        ui.end_row();
     }
 }
 
@@ -135,6 +142,13 @@ impl EguiInspector for Sphere {
 
         ui.label("Radius: ");
         DragValue::new(&mut self.radius).speed(0.05).ui(ui);
+        ui.end_row();
+
+        ui.label("Total Mass: ");
+        DragValue::new(&mut self.total_mass)
+            .speed(0.5)
+            .clamp_range(0. ..=1000.)
+            .ui(ui);
         ui.end_row();
     }
 }

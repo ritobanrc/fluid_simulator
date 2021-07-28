@@ -13,6 +13,7 @@ pub struct MpmGrid {
     pub velocity_prev: Vec<Vec3>,
     pub momentum: Vec<Vec3>,
     pub force: Vec<Vec3>,
+    pub valid_grid_indices: Vec<usize>,
     pub data: GridData,
 }
 
@@ -53,6 +54,7 @@ impl MpmGrid {
             velocity_prev: vec![Vec3::zeros(); data.num_cells],
             momentum: vec![Vec3::zeros(); data.num_cells],
             force: vec![Vec3::zeros(); data.num_cells],
+            valid_grid_indices: Vec::new(),
             data,
         }
     }
@@ -75,9 +77,12 @@ impl MpmGrid {
 
     /// Fill the `velocity` array using the `momentum` array
     pub fn compute_velocities(&mut self) {
+        self.valid_grid_indices.clear();
+
         for i in 0..self.data.num_cells {
             if self.mass[i] != 0. {
                 self.velocity[i] = self.momentum[i] / self.mass[i];
+                self.valid_grid_indices.push(i);
             }
             // Note that we don't need to handle the `else` case because `velocity` has already been zeroed out
         }
@@ -86,11 +91,7 @@ impl MpmGrid {
     pub fn velocity_update(&mut self, delta_time: Scalar) {
         self.velocity_prev.copy_from_slice(&self.velocity);
 
-        for i in 0..self.data.num_cells {
-            if self.mass[i] == 0. {
-                continue;
-            }
-
+        for &i in &self.valid_grid_indices {
             let delta_v = delta_time * self.force[i] / self.mass[i];
 
             self.velocity[i] += delta_v;

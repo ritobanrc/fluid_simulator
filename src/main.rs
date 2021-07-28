@@ -22,7 +22,7 @@ pub trait Simulation: Send {
 
     fn simulate_frame(&mut self) -> Vec<Vertex>;
 
-    fn add_particle(&mut self, position: Vec3, velocity: Vec3);
+    fn add_particle(&mut self, mass: Scalar, position: Vec3, velocity: Vec3);
 }
 
 #[derive(StructOpt, Debug)]

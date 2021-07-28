@@ -281,7 +281,7 @@ impl Simulation for NopSimulation {
         panic!("NopSimulation::simulate_frame should never be called");
     }
 
-    fn add_particle(&mut self, position: crate::Vec3, velocity: crate::Vec3) {
+    fn add_particle(&mut self, _mass: crate::Scalar, position: crate::Vec3, velocity: crate::Vec3) {
         let vel = velocity.magnitude_squared() as f32;
         let pos = position.cast();
         self.vertices.push(Vertex {

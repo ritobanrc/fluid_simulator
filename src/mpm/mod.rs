@@ -91,7 +91,7 @@ impl<CM> MpmSimulation<CM> {
         } = self;
 
         for p in 0..params.num_particles {
-            let mut xpic_next_velocity = Vec3::zeros();
+            let mut pic_next_velocity = Vec3::zeros();
             let mut flip_next_velocity = particles.velocity[p];
 
             if params.transfer_scheme == TransferScheme::APIC {
@@ -107,7 +107,7 @@ impl<CM> MpmSimulation<CM> {
                     return;
                 }
 
-                xpic_next_velocity += weight * grid.velocity(i).unwrap();
+                pic_next_velocity += weight * grid.velocity(i).unwrap();
                 flip_next_velocity +=
                     weight * (grid.velocity(i).unwrap() - grid.velocity_prev(i).unwrap());
 
@@ -120,10 +120,10 @@ impl<CM> MpmSimulation<CM> {
             });
 
             particles.velocity[p] = match self.params.transfer_scheme {
-                TransferScheme::PIC | TransferScheme::APIC => xpic_next_velocity,
+                TransferScheme::PIC | TransferScheme::APIC => pic_next_velocity,
                 TransferScheme::FLIP => flip_next_velocity,
                 TransferScheme::PIC_FLIP(blend) => {
-                    blend * flip_next_velocity + (1. - blend) * xpic_next_velocity
+                    blend * flip_next_velocity + (1. - blend) * pic_next_velocity
                 }
             };
         }
@@ -152,7 +152,7 @@ impl<CM> MpmSimulation<CM> {
 
 impl<CM: ConstitutiveModel> MpmSimulation<CM> {
     fn compute_forces(&mut self) {
-        for i in 0..self.grid.data.num_cells {
+        for &i in &self.grid.valid_grid_indices {
             // Gravity. Fg = -mg
             self.grid.force[i] = self.grid.mass[i] * Vec3::new(0., -1., 0.);
         }
@@ -268,10 +268,10 @@ impl<CM: ConstitutiveModel> Simulation for MpmSimulation<CM> {
     }
 
     /// Adds a particle to the simulation.
-    fn add_particle(&mut self, position: Vec3, velocity: Vec3) {
+    fn add_particle(&mut self, mass: Scalar, position: Vec3, velocity: Vec3) {
         self.params.num_particles += 1;
 
-        self.particles.add_particle(position, velocity);
+        self.particles.add_particle(mass, position, velocity);
         self.weights.add_particle();
     }
 
