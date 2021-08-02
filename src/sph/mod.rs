@@ -178,7 +178,7 @@ fn update_bounds(
 }
 
 /// A struct containing all of the high-level parameters for the SPH simulation
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SphParamaters {
     pub num_particles: usize,
     /// The time step

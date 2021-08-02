@@ -10,15 +10,17 @@ use crate::{
     },
     sph::SphParamaters,
 };
+use serde::{Deserialize, Serialize};
 
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct UIState {
     pub(super) algorithm: Algorithm,
     pub(super) initial_condition: InitialConditions,
-    pub(super) dt: std::time::Duration,
+    #[serde(skip)]
+    pub(super) render_dt: std::time::Duration,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) enum Algorithm {
     Mpm(MpmParameters<ConstituveModels>),
     Sph(SphParamaters),
@@ -62,6 +64,7 @@ impl Display for Algorithm {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(super) enum InitialConditions {
     Block(crate::initial_condition::Block),
     Sphere(crate::initial_condition::Sphere),
@@ -175,7 +178,7 @@ impl UIState {
 
                     self.algorithm.egui_update(ui);
 
-                    let mut fps = 1_000_000 / self.dt.as_micros() as u64;
+                    let mut fps = 1_000_000 / self.render_dt.as_micros() as u64;
                     ui.add(egui::Label::new("FPS").heading());
                     ui.add(egui::DragValue::new(&mut fps));
 
@@ -201,6 +204,15 @@ impl UIState {
 
             ui.separator();
             ui.end_row();
+
+            ui.vertical_centered_justified(|ui| {
+                if ui.button("Export JSON Settings").clicked() {
+                    print!(
+                        "{}",
+                        serde_json::to_string_pretty(self).expect("Serialization failed")
+                    );
+                }
+            });
         });
     }
 }
@@ -290,7 +302,7 @@ impl<CM: EguiInspector> EguiInspector for MpmParameters<CM> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) enum ConstituveModels {
     NeoHookean(NeoHookean),
     NewtonianFluid(NewtonianFluid),

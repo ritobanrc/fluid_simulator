@@ -2,7 +2,7 @@ use super::{MpmSimulation, Scalar, Vec3};
 use nalgebra::{Matrix3, Vector3};
 use std::ops::Range;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MpmParameters<CM> {
     /// The total number of Lagrangian particles in the simulation
     pub num_particles: usize,
@@ -20,7 +20,7 @@ pub struct MpmParameters<CM> {
     pub constitutive_model: CM,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum TransferScheme {
     PIC,
@@ -78,7 +78,7 @@ pub trait ConstitutiveModel: Send + Sized {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct NeoHookean {
     pub youngs_modulus: Scalar,
     pub poissons_ratio: Scalar,
@@ -141,7 +141,7 @@ impl ConstitutiveModel for NeoHookean {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct NewtonianFluid {
     pub k: Scalar,
     pub rest_density: Scalar,
@@ -177,7 +177,7 @@ impl ConstitutiveModel for NewtonianFluid {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FixedCorotated {
     // TODO: Remove this code duplication w/ Neo-Hookean
     pub youngs_modulus: Scalar,

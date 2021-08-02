@@ -171,7 +171,7 @@ pub fn open_window() -> Result<(), RecvError> {
                 let dt = now - last_render_time;
                 last_render_time = now;
 
-                ui_state.dt = dt;
+                ui_state.render_dt = dt;
 
                 platform.update_time(start_time.elapsed().as_secs_f64());
                 // Get swapchain output frame
