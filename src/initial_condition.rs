@@ -8,7 +8,7 @@ pub trait InitialCondition {
     fn add_particles<S: Simulation>(&self, s: &mut S);
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Block {
     pub total_mass: Scalar,
     pub size: Range<Vec3>,
@@ -56,7 +56,7 @@ impl InitialCondition for Block {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Sphere {
     pub num_particles: usize,
     pub total_mass: Scalar,

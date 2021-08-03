@@ -1,4 +1,4 @@
-use anyhow::*;
+use eyre::*;
 use glob::glob;
 use std::fs::{read_to_string, write};
 use std::path::PathBuf;

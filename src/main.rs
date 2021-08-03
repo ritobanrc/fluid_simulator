@@ -36,7 +36,7 @@ struct Opt {
     frames: usize,
 }
 
-fn main() {
+fn main() -> eyre::Result<()> {
     let opt = Opt::from_args();
 
     use crate::initial_condition::InitialCondition;
@@ -67,4 +67,6 @@ fn main() {
     } else {
         eprintln!("Fluid sim is not being displayed or saved anywhere! Did you mean to run with -w or -i?")
     }
+
+    Ok(())
 }

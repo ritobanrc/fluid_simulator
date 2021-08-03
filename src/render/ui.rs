@@ -1,3 +1,4 @@
+use eyre::{Result, WrapErr};
 use std::fmt::Display;
 
 use egui::{DragValue, Ui, Widget};
@@ -12,12 +13,24 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UIState {
     pub(super) algorithm: Algorithm,
     pub(super) initial_condition: InitialConditions,
+    pub(super) json_filename: String,
     #[serde(skip)]
     pub(super) render_dt: std::time::Duration,
+}
+
+impl Default for UIState {
+    fn default() -> Self {
+        UIState {
+            algorithm: Default::default(),
+            initial_condition: Default::default(),
+            json_filename: String::from("./example/simulation_settings.json"),
+            render_dt: Default::default(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -64,7 +77,7 @@ impl Display for Algorithm {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub(super) enum InitialConditions {
     Block(crate::initial_condition::Block),
     Sphere(crate::initial_condition::Sphere),
@@ -165,7 +178,7 @@ impl UIState {
         stop_tx: &Option<std::sync::mpsc::Sender<()>>,
     ) {
         egui::SidePanel::left("My Window", 200.).show(&ctx, |ui| {
-            egui::Grid::new("side-panel-grid")
+            egui::Grid::new("side-panel-grid-1")
                 .striped(true)
                 .spacing([40., 4.])
                 .show(ui, |ui| {
@@ -205,12 +218,38 @@ impl UIState {
             ui.separator();
             ui.end_row();
 
+            egui::Grid::new("side-panel-grid-2")
+                .striped(true)
+                .spacing([40., 4.])
+                .show(ui, |ui| {
+                    ui.heading("Import/Export JSON Settings: ");
+                    ui.end_row();
+                    ui.label("Filename");
+                    ui.text_edit_singleline(&mut self.json_filename);
+                });
+
             ui.vertical_centered_justified(|ui| {
                 if ui.button("Export JSON Settings").clicked() {
-                    print!(
-                        "{}",
-                        serde_json::to_string_pretty(self).expect("Serialization failed")
-                    );
+                    let json = serde_json::to_string_pretty(self).expect("Serialization failed");
+                    if let Err(e) = std::fs::write(&self.json_filename, json) {
+                        eprintln!(
+                            "Failed to write json settings to {}: {}",
+                            self.json_filename, e
+                        );
+                    }
+                }
+                if ui.button("Import JSON Settings").clicked() {
+                    let ui_state: Self = std::fs::read(&self.json_filename)
+                        .wrap_err_with(|| {
+                            format!("Failed to read JSON settings file: {}", &self.json_filename)
+                        })
+                        .and_then(|json| {
+                            serde_json::from_slice(&json)
+                                .wrap_err("Serde failed to deserialize JSON.")
+                        })
+                        .unwrap();
+
+                    *self = ui_state;
                 }
             });
         });
