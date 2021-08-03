@@ -305,20 +305,30 @@ impl<CM: ConstitutiveModel> Simulation for MpmSimulation<CM> {
 
             self.grid.compute_velocities();
 
-            let mut cfl_dt = 0.8 * self.calculate_cfl();
-            if cfl_dt + time_simulated > self.params.delta_time {
-                cfl_dt = self.params.delta_time - time_simulated;
-            }
-            time_simulated += cfl_dt;
-            println!("CFL Time Step: {:?}", cfl_dt);
+            let dt = if let Some(cfl) = self.params.cfl {
+                let mut cfl_dt = cfl * self.calculate_cfl();
+
+                if 1.01 * cfl_dt + time_simulated > self.params.delta_time {
+                    cfl_dt = self.params.delta_time - time_simulated; // dont' leave a small timestep left
+                } else if time_simulated + 2. * cfl_dt > self.params.delta_time {
+                    cfl_dt = cfl_dt.min(0.5 * self.params.delta_time - time_simulated);
+                    // divide the remaining time nicely
+                }
+
+                cfl_dt
+            } else {
+                self.params.delta_time
+            };
+
+            time_simulated += dt;
 
             self.compute_forces();
-            self.grid.velocity_update(cfl_dt);
+            self.grid.velocity_update(dt);
 
-            self.update_deformation_gradient(cfl_dt);
+            self.update_deformation_gradient(dt);
 
             self.grid_to_particles();
-            self.advect_particles(cfl_dt);
+            self.advect_particles(dt);
 
             num_substeps += 1;
         }

@@ -1,4 +1,4 @@
-use eyre::{Result, WrapErr};
+use eyre::WrapErr;
 use std::fmt::Display;
 
 use egui::{DragValue, Ui, Widget};
@@ -56,8 +56,10 @@ impl EguiInspector for Algorithm {
     fn egui_update(&mut self, ui: &mut Ui) {
         ui.heading("Algorithm");
 
-        ui.selectable_value(self, Algorithm::Sph(SphParamaters::default()), "Sph");
-        ui.selectable_value(self, Algorithm::Mpm(MpmParameters::default()), "Mpm");
+        ui.horizontal(|ui| {
+            ui.selectable_value(self, Algorithm::Sph(SphParamaters::default()), "Sph");
+            ui.selectable_value(self, Algorithm::Mpm(MpmParameters::default()), "Mpm");
+        });
 
         ui.end_row();
 
@@ -109,8 +111,10 @@ impl EguiInspector for InitialConditions {
     fn egui_update(&mut self, ui: &mut Ui) {
         ui.heading("Initial Condition");
 
-        ui.selectable_value(self, InitialConditions::Block(Block::default()), "Block");
-        ui.selectable_value(self, InitialConditions::Sphere(Sphere::default()), "Sphere");
+        ui.horizontal(|ui| {
+            ui.selectable_value(self, InitialConditions::Block(Block::default()), "Block");
+            ui.selectable_value(self, InitialConditions::Sphere(Sphere::default()), "Sphere");
+        });
         ui.end_row();
 
         match self {
@@ -300,6 +304,21 @@ impl<CM: EguiInspector> EguiInspector for MpmParameters<CM> {
         ui.label("Bounds");
         ui.end_row();
         self.bounds.egui_update(ui);
+
+        ui.label("CFL");
+        let mut use_cfl = self.cfl.is_some();
+        ui.horizontal(|ui| {
+            if ui.checkbox(&mut use_cfl, "").changed() {
+                match use_cfl {
+                    true => self.cfl = Some(0.8),
+                    false => self.cfl = None,
+                }
+            }
+            if let Some(ref mut cfl) = self.cfl {
+                ui.add(egui::DragValue::new(cfl).clamp_range(0. ..=1.5).speed(0.05));
+            }
+        });
+        ui.end_row();
 
         ui.separator();
         ui.end_row();

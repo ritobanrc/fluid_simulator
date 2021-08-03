@@ -18,6 +18,8 @@ pub struct MpmParameters<CM> {
     pub transfer_scheme: TransferScheme,
     /// Paramters for the Neo-Hookean Constitutive Model. TODO: Add support for other models
     pub constitutive_model: CM,
+    /// Whether or not to use the CFL timestep restriction,
+    pub cfl: Option<f64>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -44,6 +46,7 @@ impl<CM: Default> Default for MpmParameters<CM> {
             delta_time: 0.01,
             transfer_scheme: TransferScheme::default(),
             constitutive_model: CM::default(),
+            cfl: Some(0.8),
         }
     }
 }
