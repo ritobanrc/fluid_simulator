@@ -37,7 +37,7 @@ pub fn render_texture(
 
     for i in 0..num_frames {
         let vertices = rx.recv().expect("Failed to recieve verts");
-        state.update(&mut scene, &vertices);
+        state.update(&mut scene, 20., &vertices);
         state.render(&scene, None).expect("Swapchain error");
 
         block_on(async {
@@ -237,7 +237,7 @@ pub fn open_window() -> Result<(), RecvError> {
                     nop.vertices
                 };
 
-                state.update(&mut scene, &vertices);
+                state.update(&mut scene, ui_state.particle_size, &vertices);
 
                 match state.render(&scene, Some(egui_state)) {
                     Ok(_) => {}

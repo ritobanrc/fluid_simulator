@@ -17,7 +17,7 @@ pub struct Scene {
 impl Scene {
     pub fn new(verts: &[Vertex], device: &wgpu::Device, screen_size: (u32, u32)) -> Self {
         let camera = Camera::new(screen_size.0, screen_size.1);
-        let mut uniforms = Uniforms::new();
+        let mut uniforms = Uniforms::default();
         uniforms.update_view_proj(&camera);
 
         let uniform_state = UniformState::new(device, uniforms);
@@ -65,16 +65,20 @@ impl Vertex {
 pub struct Uniforms {
     // We can't use nalgebra with bytemuck directly so we'll have
     // to convert the Matrix4 into a 4x4 f32 array
-    view_proj: [[f32; 4]; 4],
+    pub(super) view_proj: [[f32; 4]; 4],
+    pub(super) u_point_size: f32,
+}
+
+impl Default for Uniforms {
+    fn default() -> Self {
+        Self {
+            view_proj: na::Matrix4::identity().into(),
+            u_point_size: 20.,
+        }
+    }
 }
 
 impl Uniforms {
-    fn new() -> Self {
-        Self {
-            view_proj: na::Matrix4::identity().into(),
-        }
-    }
-
     pub fn update_view_proj(&mut self, camera: &Camera) {
         self.view_proj = camera.build_view_projection_matrix().into();
     }
@@ -90,7 +94,7 @@ pub struct UniformState {
 impl UniformState {
     fn new(device: &wgpu::Device, uniforms: Uniforms) -> Self {
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Camera Uniform Buffer"),
+            label: Some("Uniform Buffer"),
             contents: bytemuck::cast_slice(&[uniforms]),
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
         });

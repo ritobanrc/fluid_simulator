@@ -18,6 +18,7 @@ pub struct UIState {
     pub(super) algorithm: Algorithm,
     pub(super) initial_condition: InitialConditions,
     pub(super) json_filename: String,
+    pub(super) particle_size: f32,
     #[serde(skip)]
     pub(super) render_dt: std::time::Duration,
 }
@@ -28,6 +29,7 @@ impl Default for UIState {
             algorithm: Default::default(),
             initial_condition: Default::default(),
             json_filename: String::from("./example/simulation_settings.json"),
+            particle_size: 20.,
             render_dt: Default::default(),
         }
     }
@@ -198,7 +200,14 @@ impl UIState {
                     let mut fps = 1_000_000 / self.render_dt.as_micros() as u64;
                     ui.add(egui::Label::new("FPS").heading());
                     ui.add(egui::DragValue::new(&mut fps));
+                    ui.end_row();
 
+                    ui.add(egui::Label::new("Particle Size").heading());
+                    ui.add(
+                        egui::DragValue::new(&mut self.particle_size)
+                            .clamp_range(0. ..=100.)
+                            .speed(0.5),
+                    );
                     ui.end_row();
                 });
 

@@ -2,6 +2,7 @@ mod initial_condition;
 mod mpm;
 mod render;
 mod sph;
+mod statistics;
 
 extern crate nalgebra as na;
 

@@ -9,10 +9,11 @@ layout(location=0) out vec3 v_color;
 layout(set=0, binding=0) // 1.
 uniform Uniforms {
     mat4 u_view_proj; // 2.
+    float u_point_size;
 };
 
 void main() {
     v_color = a_color;
     gl_Position = u_view_proj * vec4(a_position, 1.0);
-    gl_PointSize = 20.0 / gl_Position.w;
+    gl_PointSize = u_point_size / gl_Position.w;
 }

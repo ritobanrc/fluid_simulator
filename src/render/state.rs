@@ -284,9 +284,11 @@ impl State {
         scene.camera_controller.process_events(event)
     }
 
-    pub fn update(&mut self, scene: &mut Scene, verts: &[Vertex]) {
+    pub fn update(&mut self, scene: &mut Scene, point_size: f32, verts: &[Vertex]) {
         scene.camera_controller.update_camera(&mut scene.camera);
         scene.uniforms.update_view_proj(&scene.camera);
+        scene.uniforms.u_point_size = point_size;
+
         self.queue.write_buffer(
             &scene.uniform_state.buffer,
             0,

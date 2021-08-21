@@ -22,6 +22,7 @@ type Vec3 = Vector3<Scalar>;
 
 /// Contains all of the state for the Material Point Method Simulation
 pub struct MpmSimulation<CM> {
+    pub time: Scalar,
     pub particles: MpmParticles,
     pub grid: MpmGrid,
     pub params: MpmParameters<CM>,
@@ -47,6 +48,7 @@ impl<CM> MpmSimulation<CM> {
         // isn't smart enough to figure out that we should be able to access these fields
         // simultaneously
         let MpmSimulation {
+            time: _,
             ref particles,
             ref mut grid,
             ref weights,
@@ -84,6 +86,7 @@ impl<CM> MpmSimulation<CM> {
 
     fn grid_to_particles(&mut self) {
         let MpmSimulation {
+            time: _,
             ref mut particles,
             ref grid,
             ref weights,
@@ -107,16 +110,21 @@ impl<CM> MpmSimulation<CM> {
                     return;
                 }
 
-                pic_next_velocity += weight * grid.velocity(i).unwrap();
-                flip_next_velocity +=
-                    weight * (grid.velocity(i).unwrap() - grid.velocity_prev(i).unwrap());
+                // Try blocks please  https://doc.rust-lang.org/beta/unstable-book/language-features/try-blocks.html
+                (|| {
+                    pic_next_velocity += weight * grid.velocity(i)?;
+                    flip_next_velocity += weight * (grid.velocity(i)? - grid.velocity_prev(i)?);
 
-                if params.transfer_scheme == TransferScheme::APIC {
-                    let xi = grid.data.coord_to_pos(i);
-                    let xp = particles.position[p];
-                    particles.affine_matrix[p] +=
-                        weight * grid.velocity(i).unwrap() * (xi - xp).transpose();
-                }
+                    if params.transfer_scheme == TransferScheme::APIC {
+                        let xi = grid.data.coord_to_pos(i);
+                        let xp = particles.position[p];
+                        particles.affine_matrix[p] +=
+                            weight * grid.velocity(i)? * (xi - xp).transpose();
+                    }
+
+                    Some(())
+                })()
+                .expect("Grid cell not in grid domain.");
             });
 
             particles.velocity[p] = match self.params.transfer_scheme {
@@ -161,6 +169,7 @@ impl<CM: ConstitutiveModel> MpmSimulation<CM> {
             let piola_kirchoff = self.params.constitutive_model.piola_kirchoff(&self, p);
 
             let MpmSimulation {
+                time: _,
                 ref particles,
                 ref mut grid,
                 ref weights,
@@ -260,6 +269,7 @@ impl<CM: ConstitutiveModel> Simulation for MpmSimulation<CM> {
     /// Creates a new simulation with the given parameters.
     fn new(params: Self::Parameters) -> Self {
         MpmSimulation {
+            time: 0.,
             particles: MpmParticles::default(),
             grid: MpmGrid::new(&params),
             params,
@@ -332,6 +342,7 @@ impl<CM: ConstitutiveModel> Simulation for MpmSimulation<CM> {
 
             num_substeps += 1;
         }
+        self.time += time_simulated;
         println!("Simulated frame with {:?} substeps. ", num_substeps);
 
         self.create_verts()
