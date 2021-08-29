@@ -41,7 +41,7 @@ impl<CM: Default> Default for MpmParameters<CM> {
     fn default() -> Self {
         MpmParameters {
             num_particles: 0,
-            h: 0.05,
+            h: 0.1,
             bounds: Vector3::zeros()..Vector3::new(2., 2., 2.),
             delta_time: 0.01,
             transfer_scheme: TransferScheme::default(),

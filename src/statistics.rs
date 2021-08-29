@@ -34,7 +34,7 @@ impl<CM> SimulationStatistics for MpmSimulation<CM> {
             &self.particles.velocity,
             &self.particles.position
         )
-        .map(|(&m, v, x)| m * v.cross(&x))
+        .map(|(&m, v, x)| m * v.cross(x))
         .sum()
     }
 

@@ -168,7 +168,7 @@ impl<CM: ConstitutiveModel> MpmSimulation<CM> {
         }
 
         for p in 0..self.params.num_particles {
-            let piola_kirchoff = self.params.constitutive_model.piola_kirchoff(&self, p);
+            let piola_kirchoff = self.params.constitutive_model.piola_kirchoff(self, p);
 
             let MpmSimulation {
                 time: _,

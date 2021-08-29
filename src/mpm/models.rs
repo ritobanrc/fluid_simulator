@@ -96,7 +96,7 @@ impl IsotropicParameters {
 
 impl Default for IsotropicParameters {
     fn default() -> Self {
-        Self::new(1.4e5, 0.2)
+        Self::new(9500., 0.2)
     }
 }
 

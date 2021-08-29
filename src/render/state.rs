@@ -149,7 +149,7 @@ fn create_render_pipeline(
 
     let vs_module = device.create_shader_module(&wgpu::include_spirv!("../shader.vert.spv"));
     let fs_module =
-        device.create_shader_module(&&dont_validate(wgpu::include_spirv!("../shader.frag.spv")));
+        device.create_shader_module(&dont_validate(wgpu::include_spirv!("../shader.frag.spv")));
 
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Render Pipeline Layout"),
@@ -258,7 +258,7 @@ impl State {
             } => {
                 sc_desc.width = new_size.width;
                 sc_desc.height = new_size.height;
-                *swap_chain = self.device.create_swap_chain(&surface, &sc_desc);
+                *swap_chain = self.device.create_swap_chain(surface, sc_desc);
             }
             RenderTarget::Texture { .. } => {
                 panic!("Cannot resize a texture target.")
@@ -325,7 +325,7 @@ impl State {
             }
             RenderTarget::Texture {
                 ref texture_view, ..
-            } => &texture_view,
+            } => texture_view,
         };
 
         let mut encoder = self
@@ -361,7 +361,7 @@ impl State {
             .render_pipeline
             .get_or_insert_with(|| create_render_pipeline(device, scene, format));
 
-        render_pass.set_pipeline(&render_pipeline);
+        render_pass.set_pipeline(render_pipeline);
 
         render_pass.set_vertex_buffer(0, scene.vertex_buffer.slice(..));
         render_pass.set_bind_group(0, &scene.uniform_state.bind_group, &[]);
@@ -387,8 +387,8 @@ impl State {
 
             egui_state.render_pass.execute(
                 &mut encoder,
-                &frame,
-                &egui_state.paint_jobs,
+                frame,
+                egui_state.paint_jobs,
                 &egui_state.screen_descriptor,
                 None,
             );
@@ -404,12 +404,12 @@ impl State {
             let u32_size = std::mem::size_of::<u32>() as u32;
             encoder.copy_texture_to_buffer(
                 wgpu::ImageCopyTexture {
-                    texture: &texture,
+                    texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
                 },
                 wgpu::ImageCopyBuffer {
-                    buffer: &buffer,
+                    buffer,
                     layout: wgpu::ImageDataLayout {
                         offset: 0,
                         bytes_per_row: (u32_size * texture_size.width).try_into().ok(),
