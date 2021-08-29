@@ -6,8 +6,8 @@ use egui::{DragValue, Ui, Widget};
 use crate::{
     initial_condition::{Block, InitialCondition, Sphere},
     mpm::{
-        parameters::{FixedCorotated, NeoHookean, NewtonianFluid},
-        MpmParameters,
+        models::{FixedCorotated, IsotropicParameters, NeoHookean, NewtonianFluid},
+        parameters::MpmParameters,
     },
     sph::SphParamaters,
 };
@@ -437,7 +437,7 @@ impl EguiInspector for ConstituveModels {
     }
 }
 
-impl EguiInspector for NeoHookean {
+impl EguiInspector for IsotropicParameters {
     fn egui_update(&mut self, ui: &mut Ui) {
         ui.label("Young's Modulus: ");
         let response_youngs_modulus =
@@ -455,21 +455,15 @@ impl EguiInspector for NeoHookean {
     }
 }
 
+impl EguiInspector for NeoHookean {
+    fn egui_update(&mut self, ui: &mut Ui) {
+        self.0.egui_update(ui);
+    }
+}
+
 impl EguiInspector for FixedCorotated {
     fn egui_update(&mut self, ui: &mut Ui) {
-        ui.label("Young's Modulus: ");
-        let response_youngs_modulus =
-            ui.add(egui::Slider::new(&mut self.youngs_modulus, 0. ..=50_000.));
-        ui.end_row();
-
-        ui.label("Poisson's Ratio: ");
-        let response_poissons_ratio =
-            ui.add(egui::Slider::new(&mut self.poissons_ratio, 0. ..=0.5));
-        ui.end_row();
-
-        if response_youngs_modulus.changed() || response_poissons_ratio.changed() {
-            self.recalculate_lame_parameters();
-        }
+        self.0.egui_update(ui);
     }
 }
 

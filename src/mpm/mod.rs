@@ -1,9 +1,11 @@
 mod grid;
+pub mod models;
 pub mod parameters;
 mod particles;
 
+pub use models::{FixedCorotated, NeoHookean, NewtonianFluid};
 use na::Matrix3;
-pub use parameters::{FixedCorotated, MpmParameters, NeoHookean, NewtonianFluid};
+pub use parameters::MpmParameters;
 
 use nalgebra::Vector3;
 
@@ -15,7 +17,7 @@ use grid::MpmGrid;
 use particles::MpmParticles;
 
 use self::grid::weights::ParticleGridWeights;
-use self::parameters::ConstitutiveModel;
+use self::models::ConstitutiveModel;
 
 type Scalar = f64;
 type Vec3 = Vector3<Scalar>;
