@@ -40,8 +40,6 @@ impl<CM> MpmSimulation<CM> {
     fn particles_to_grid(&mut self) {
         // NOTE: Because Dp is proportional to the identity matrix (See Course Notes Pg. 42)
         //       its stored as just a float
-        //
-        //  TODO: Support other degree polynomials
         #![allow(non_snake_case)]
         let Dp = (self.params.h * self.params.h) / 3.;
         let Dp_inv = 1. / Dp;
@@ -168,7 +166,10 @@ impl<CM: ConstitutiveModel> MpmSimulation<CM> {
         }
 
         for p in 0..self.params.num_particles {
-            let piola_kirchoff = self.params.constitutive_model.piola_kirchoff(self, p);
+            let piola_kirchoff = self
+                .params
+                .constitutive_model
+                .piola_kirchoff(&self.particles, p);
 
             let MpmSimulation {
                 time: _,
@@ -186,14 +187,14 @@ impl<CM: ConstitutiveModel> MpmSimulation<CM> {
                     let force_contrib = -1.
                         * initial_volume
                         * piola_kirchoff
-                        * particles.deformation_gradient[p].transpose()
+                        * particles.elastic_deformation_gradient[p].transpose()
                         * weight_grad;
 
                     if cfg!(debug_assertions) && force_contrib.iter().any(|x| x.is_nan()) {
                         eprintln!("Force Contribution is NaN: {:?}", force_contrib);
                         eprintln!(
                             "    Deformation Gradient: {}",
-                            particles.deformation_gradient[p]
+                            particles.elastic_deformation_gradient[p]
                         );
                         eprintln!("    Piola Kirchoff: {}", piola_kirchoff);
                     }
@@ -202,9 +203,7 @@ impl<CM: ConstitutiveModel> MpmSimulation<CM> {
                 });
         }
     }
-}
 
-impl<CM> MpmSimulation<CM> {
     fn update_deformation_gradient(&mut self, delta_time: Scalar) {
         for p in 0..self.params.num_particles {
             // Eqn. 181 Course Notes
@@ -216,10 +215,16 @@ impl<CM> MpmSimulation<CM> {
                         .sum::<Matrix3<Scalar>>()
                 };
 
-            self.particles.deformation_gradient[p] *= fact;
+            self.particles.elastic_deformation_gradient[p] *= fact;
+
+            self.params
+                .constitutive_model
+                .handle_plasticity(&mut self.particles, p);
         }
     }
+}
 
+impl<CM> MpmSimulation<CM> {
     fn advect_particles(&mut self, delta_time: Scalar) {
         for p in 0..self.params.num_particles {
             self.particles.position[p] += delta_time * self.particles.velocity[p];

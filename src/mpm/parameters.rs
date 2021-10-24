@@ -16,7 +16,7 @@ pub struct MpmParameters<CM> {
     /// Which algorithm to use for transferring between particles and grid nodes (PIC, FLIP, APIC,
     /// or a PIC/FLIP blend)
     pub transfer_scheme: TransferScheme,
-    /// Paramters for the Neo-Hookean Constitutive Model. TODO: Add support for other models
+    /// Paramters for the Constitutive Model.
     pub constitutive_model: CM,
     /// Whether or not to use the CFL timestep restriction,
     pub cfl: Option<f64>,

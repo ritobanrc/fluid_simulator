@@ -6,7 +6,7 @@ use egui::{DragValue, Ui, Widget};
 use crate::{
     initial_condition::{Block, InitialCondition, Sphere},
     mpm::{
-        models::{FixedCorotated, IsotropicParameters, NeoHookean, NewtonianFluid},
+        models::{FixedCorotated, IsotropicParameters, NeoHookean, NewtonianFluid, SnowPlasticity},
         parameters::MpmParameters,
     },
     sph::SphParamaters,
@@ -374,6 +374,7 @@ pub(super) enum ConstituveModels {
     NeoHookean(NeoHookean),
     NewtonianFluid(NewtonianFluid),
     FixedCorotated(FixedCorotated),
+    SnowPlasticity(SnowPlasticity),
 }
 
 impl PartialEq for ConstituveModels {
@@ -384,6 +385,7 @@ impl PartialEq for ConstituveModels {
             (NeoHookean(_), NeoHookean(_))
                 | (NewtonianFluid(_), NewtonianFluid(_))
                 | (FixedCorotated(_), FixedCorotated(_))
+                | (SnowPlasticity(_), SnowPlasticity(_))
         )
     }
 }
@@ -400,6 +402,7 @@ impl Display for ConstituveModels {
             ConstituveModels::NeoHookean(_) => write!(f, "NeoHookean"),
             ConstituveModels::NewtonianFluid(_) => write!(f, "Newtonian Fluid"),
             ConstituveModels::FixedCorotated(_) => write!(f, "Fixed Corotated"),
+            ConstituveModels::SnowPlasticity(_) => write!(f, "Snow Plasticity"),
         }
     }
 }
@@ -427,12 +430,18 @@ impl EguiInspector for ConstituveModels {
             ConstituveModels::FixedCorotated(FixedCorotated::default()),
             "Fixed Corotated",
         );
+        ui.selectable_value(
+            self,
+            ConstituveModels::SnowPlasticity(SnowPlasticity::default()),
+            "Snow Plasticity",
+        );
         ui.end_row();
 
         match self {
             Self::NeoHookean(a) => a.egui_update(ui),
             Self::NewtonianFluid(a) => a.egui_update(ui),
             Self::FixedCorotated(a) => a.egui_update(ui),
+            Self::SnowPlasticity(a) => a.egui_update(ui),
         }
     }
 }
@@ -464,6 +473,30 @@ impl EguiInspector for NeoHookean {
 impl EguiInspector for FixedCorotated {
     fn egui_update(&mut self, ui: &mut Ui) {
         self.0.egui_update(ui);
+    }
+}
+
+impl EguiInspector for SnowPlasticity {
+    fn egui_update(&mut self, ui: &mut Ui) {
+        self.init_isotropic_params.egui_update(ui);
+
+        ui.label("Hardening: ");
+        ui.add(egui::Slider::new(&mut self.hardening, 0. ..=20.));
+        ui.end_row();
+
+        ui.label("Critical Compression: ");
+        ui.add(egui::Slider::new(
+            &mut self.critical_compression,
+            1.5e-2..=4.0e-2,
+        ));
+        ui.end_row();
+
+        ui.label("Critical Stretch: ");
+        ui.add(egui::Slider::new(
+            &mut self.critical_stretch,
+            4.0e-3..=1.0e-2,
+        ));
+        ui.end_row();
     }
 }
 

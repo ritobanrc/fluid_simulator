@@ -1,3 +1,4 @@
+mod eulerian;
 mod initial_condition;
 mod mpm;
 mod render;

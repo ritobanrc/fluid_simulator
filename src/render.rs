@@ -297,8 +297,9 @@ fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<V
             match &params.constitutive_model {
                 ui::ConstituveModels::NeoHookean(nh) => {
                     println!("Simulating MPM w/ NeoHookean Model: {:?}", nh);
-                    start_simulation_helper::<crate::MpmSimulation<crate::mpm::NeoHookean>>(
+                    start_simulation_helper::<crate::MpmSimulation<_>>(
                         // Would be very nice to use type-changing struct update
+                        // TODO: Probably better to turn this into a macro
                         // syntax (https://github.com/rust-lang/rfcs/pull/2528) here, but alas, its not stable yet
                         crate::MpmParameters {
                             num_particles: params.num_particles,
@@ -316,7 +317,7 @@ fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<V
 
                 ui::ConstituveModels::NewtonianFluid(nf) => {
                     println!("Simulating MPM w/ Newtonian Fluid Model: {:?}", nf);
-                    start_simulation_helper::<crate::MpmSimulation<crate::mpm::NewtonianFluid>>(
+                    start_simulation_helper::<crate::MpmSimulation<_>>(
                         crate::MpmParameters {
                             num_particles: params.num_particles,
                             h: params.h,
@@ -333,7 +334,7 @@ fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<V
 
                 ui::ConstituveModels::FixedCorotated(fc) => {
                     println!("Simulating MPM w/ FixedCorotated Model: {:?}", fc);
-                    start_simulation_helper::<crate::MpmSimulation<crate::mpm::FixedCorotated>>(
+                    start_simulation_helper::<crate::MpmSimulation<_>>(
                         crate::MpmParameters {
                             num_particles: params.num_particles,
                             h: params.h,
@@ -341,6 +342,26 @@ fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<V
                             delta_time: params.delta_time,
                             transfer_scheme: params.transfer_scheme,
                             constitutive_model: fc.clone(),
+                            cfl: params.cfl,
+                        },
+                        &ui_state.initial_condition,
+                        stop_rx,
+                    )
+                }
+
+                ui::ConstituveModels::SnowPlasticity(sp) => {
+                    println!(
+                        "Simulating MPM w/ Drucker-Prager Snow Plastcity Model: {:?}",
+                        sp
+                    );
+                    start_simulation_helper::<crate::MpmSimulation<_>>(
+                        crate::MpmParameters {
+                            num_particles: params.num_particles,
+                            h: params.h,
+                            bounds: params.bounds.clone(),
+                            delta_time: params.delta_time,
+                            transfer_scheme: params.transfer_scheme,
+                            constitutive_model: sp.clone(),
                             cfl: params.cfl,
                         },
                         &ui_state.initial_condition,

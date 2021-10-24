@@ -156,6 +156,7 @@ impl Iterator for NeighborhoodIter {
     }
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,3 +281,5 @@ mod tests {
         }
     }
 }
+
+*/

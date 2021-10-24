@@ -67,7 +67,7 @@ pub struct Sphere {
 impl Default for Sphere {
     fn default() -> Self {
         Sphere {
-            num_particles: 5000,
+            num_particles: 2000,
             total_mass: 500.,
             center: Vec3::new(1., 1., 1.),
             radius: 0.25,

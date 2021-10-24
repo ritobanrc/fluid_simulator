@@ -7,7 +7,8 @@ pub struct MpmParticles {
     pub position: Vec<Vec3>,
     pub velocity: Vec<Vec3>,
     pub initial_volume: Vec<Scalar>,
-    pub deformation_gradient: Vec<Matrix3<Scalar>>,
+    pub elastic_deformation_gradient: Vec<Matrix3<Scalar>>,
+    pub plastic_deformation_gradient: Vec<Matrix3<Scalar>>,
     // TODO: Remove the memory overhead of storing the affine matrices when APIC isn't used
     pub affine_matrix: Vec<Matrix3<Scalar>>,
     // Probably other stuff: `mass`, `cell`, `initial_volume`, `density`, `pressure`, etc.
@@ -20,7 +21,8 @@ impl Default for MpmParticles {
             position: Vec::new(),
             velocity: Vec::new(),
             initial_volume: Vec::new(),
-            deformation_gradient: Vec::new(),
+            elastic_deformation_gradient: Vec::new(),
+            plastic_deformation_gradient: Vec::new(),
             affine_matrix: Vec::new(),
         }
     }
@@ -35,7 +37,10 @@ impl MpmParticles {
         self.mass.push(mass);
         self.position.push(position);
         self.velocity.push(velocity);
-        self.deformation_gradient.push(Matrix3::identity());
+        self.elastic_deformation_gradient.push(Matrix3::identity());
+
+        // TODO: Don't use this memory if not necessary
+        self.plastic_deformation_gradient.push(Matrix3::identity());
         self.affine_matrix.push(Matrix3::zeros());
 
         // NOTE: I am intentionally not populating `initial_volume`, it will be populated
