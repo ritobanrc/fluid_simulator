@@ -328,8 +328,8 @@ impl<CM: ConstitutiveModel> Simulation for MpmSimulation<CM> {
                 if 1.01 * cfl_dt + time_simulated > self.params.delta_time {
                     cfl_dt = self.params.delta_time - time_simulated; // dont' leave a small timestep left
                 } else if time_simulated + 2. * cfl_dt > self.params.delta_time {
-                    cfl_dt = cfl_dt.min(0.5 * self.params.delta_time - time_simulated);
                     // divide the remaining time nicely
+                    cfl_dt = cfl_dt.min(0.5 * self.params.delta_time - time_simulated);
                 }
 
                 cfl_dt
@@ -340,7 +340,7 @@ impl<CM: ConstitutiveModel> Simulation for MpmSimulation<CM> {
             time_simulated += dt;
 
             self.compute_forces();
-            self.grid.velocity_update(dt);
+            self.grid.velocity_update(dt, &self.params);
 
             self.update_deformation_gradient(dt);
 

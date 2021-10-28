@@ -4,6 +4,8 @@ pub mod weights;
 use na::Vector3;
 
 use super::{MpmParameters, Scalar, Vec3};
+use crate::collisions::{ImplicitObject, Invert};
+use crate::util::*;
 use data::GridData;
 
 /// Stores the grid data for the Mpm Simulation
@@ -43,8 +45,8 @@ grid_impls!(
 
 impl MpmGrid {
     pub fn new<CM>(params: &MpmParameters<CM>) -> Self {
-        let grid_bounds_start = params.bounds.start - Vec3::from_element(params.h);
-        let grid_bounds_end = params.bounds.end + Vec3::from_element(params.h);
+        let grid_bounds_start = params.bounds.start - Vec3::from_element(1. * params.h);
+        let grid_bounds_end = params.bounds.end + Vec3::from_element(1. * params.h);
 
         let data = GridData::new(params.h, grid_bounds_start..grid_bounds_end);
 
@@ -88,7 +90,7 @@ impl MpmGrid {
         }
     }
 
-    pub fn velocity_update(&mut self, delta_time: Scalar) {
+    pub fn velocity_update<CM>(&mut self, delta_time: Scalar, params: &MpmParameters<CM>) {
         self.velocity_prev.copy_from_slice(&self.velocity);
 
         for &i in &self.valid_grid_indices {
@@ -96,8 +98,6 @@ impl MpmGrid {
 
             self.velocity[i] += delta_v;
 
-            // Enforce boundary conditions
-            // TODO: Abstract over different types of BCs
             let coord = self.data.index_to_coord(i);
             if coord.x <= 1 || coord.x >= self.data.size.x - 2 {
                 self.velocity[i].x = 0.
@@ -108,6 +108,45 @@ impl MpmGrid {
             if coord.z <= 1 || coord.z >= self.data.size.z - 2 {
                 self.velocity[i].z = 0.
             }
+        }
+
+        // do this is a less stupid way. i hate dealing with ghost cells lmao
+        //self.handle_collision(
+        //Invert(params.bounds.thickened(-2. * params.h)),
+        //params.boundary_mu,
+        //);
+    }
+
+    pub fn handle_collision<O: ImplicitObject>(&mut self, object: O, mu: Scalar) {
+        for &i in &self.valid_grid_indices {
+            let coord = self.data.index_to_coord(i);
+            let pos = self.data.coord_to_pos(coord);
+            let v = self.velocity[i];
+
+            let phi = object.signed_distance(pos);
+            if phi > 0. {
+                continue;
+            }
+
+            let normal = object.normal(pos);
+            let object_vel = Vec3::zeros(); // TODO: support moving objects!
+            let v_rel = v - object_vel;
+
+            let v_normal = v_rel.dot(&normal);
+            if v_normal >= 0. {
+                continue;
+            }
+
+            let v_tangent = v_rel - normal * v_normal;
+
+            let v_rel_modified = if v_tangent.magnitude() <= -mu * v_normal {
+                println!("Static friction");
+                Vec3::zeros()
+            } else {
+                v_tangent + mu * v_normal * v_tangent.normalize()
+            };
+
+            self.velocity[i] = object_vel + v_rel_modified;
         }
     }
 }

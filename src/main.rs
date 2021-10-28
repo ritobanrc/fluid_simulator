@@ -1,9 +1,10 @@
-mod eulerian;
+mod collisions;
 mod initial_condition;
 mod mpm;
 mod render;
 mod sph;
 mod statistics;
+mod util;
 
 extern crate nalgebra as na;
 
@@ -31,21 +32,39 @@ pub trait Simulation: Send {
 #[structopt(name = "sph_solver")]
 struct Opt {
     #[structopt(short, long)]
-    window: bool,
-    #[structopt(short, long)]
     output_dir: Option<std::path::PathBuf>,
     #[structopt(short, long, default_value = "600")]
     frames: usize,
 }
 
+fn setup_tracing() {
+    use tracing::{event, info, span, trace, Level};
+
+    let subscriber = tracing_subscriber::fmt()
+        .pretty()
+        .with_max_level(Level::TRACE)
+        // build but do not install the subscriber.
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("Failed to set global default subscriber.");
+
+    let span = span!(Level::TRACE, "this is a span?");
+
+    event!(Level::WARN, "this is an event");
+    let _enter = span.enter();
+
+    info!("hello world!!");
+    trace!("trace!");
+}
+
 fn main() -> eyre::Result<()> {
     let opt = Opt::from_args();
 
+    //setup_tracing();
+
     use crate::initial_condition::InitialCondition;
-    if opt.window {
-        println!("Displaying fluid simulation in window.");
-        render::open_window().expect("Failed to recieve vertecies");
-    } else if let Some(path) = opt.output_dir {
+    if let Some(path) = opt.output_dir {
         let (tx, rx) = channel::<Vec<Vertex>>();
 
         let params = MpmParameters::<mpm::NeoHookean>::default();
@@ -67,7 +86,8 @@ fn main() -> eyre::Result<()> {
         render::render_texture(path, rx, 1920, 1080, opt.frames)
             .expect("Failed to recieve verticies");
     } else {
-        eprintln!("Fluid sim is not being displayed or saved anywhere! Did you mean to run with -w or -i?")
+        println!("Displaying fluid simulation in window.");
+        render::open_window().expect("Failed to recieve vertecies");
     }
 
     Ok(())

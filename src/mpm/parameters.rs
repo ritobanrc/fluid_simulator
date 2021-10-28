@@ -20,6 +20,8 @@ pub struct MpmParameters<CM> {
     pub constitutive_model: CM,
     /// Whether or not to use the CFL timestep restriction,
     pub cfl: Option<f64>,
+    /// The coefficient of friction on the boundary
+    pub boundary_mu: Scalar,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -47,6 +49,7 @@ impl<CM: Default> Default for MpmParameters<CM> {
             transfer_scheme: TransferScheme::default(),
             constitutive_model: CM::default(),
             cfl: Some(0.8),
+            boundary_mu: 0.4,
         }
     }
 }

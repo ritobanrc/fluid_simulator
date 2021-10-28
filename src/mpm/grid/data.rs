@@ -12,7 +12,7 @@ pub struct GridData {
     pub size: Vector3<usize>,
     /// The grid spacing
     pub h: Scalar,
-    //// Reciprocal of the grid spacing, for efficient computation
+    /// Reciprocal of the grid spacing, for efficient computation
     pub one_over_h: Scalar,
     /// The bounds of the domain spanned by the grid.
     pub bounds: Range<Vec3>,

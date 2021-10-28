@@ -186,7 +186,7 @@ impl UIState {
         egui::SidePanel::left("My Window", 200.).show(&ctx, |ui| {
             egui::Grid::new("side-panel-grid-1")
                 .striped(true)
-                .spacing([40., 4.])
+                .spacing([40., 8.])
                 .show(ui, |ui| {
                     ui.end_row();
 
@@ -231,12 +231,11 @@ impl UIState {
             ui.separator();
             ui.end_row();
 
+            ui.heading("Import/Export JSON Settings: ");
             egui::Grid::new("side-panel-grid-2")
                 .striped(true)
                 .spacing([40., 4.])
                 .show(ui, |ui| {
-                    ui.heading("Import/Export JSON Settings: ");
-                    ui.end_row();
                     ui.label("Filename");
                     ui.text_edit_singleline(&mut self.json_filename);
                 });
@@ -329,6 +328,10 @@ impl<CM: EguiInspector> EguiInspector for MpmParameters<CM> {
         });
         ui.end_row();
 
+        ui.label("Boundary Mu");
+        ui.add(egui::Slider::new(&mut self.boundary_mu, 0. ..=1.));
+        ui.end_row();
+
         ui.separator();
         ui.end_row();
 
@@ -413,28 +416,31 @@ impl EguiInspector for ConstituveModels {
         ui.end_row();
 
         ui.heading("Constitutive Model");
-        ui.end_row();
 
-        ui.selectable_value(
-            self,
-            ConstituveModels::NeoHookean(NeoHookean::default()),
-            "NeoHookean",
-        );
-        ui.selectable_value(
-            self,
-            ConstituveModels::NewtonianFluid(NewtonianFluid::default()),
-            "Newtonian Fluid",
-        );
-        ui.selectable_value(
-            self,
-            ConstituveModels::FixedCorotated(FixedCorotated::default()),
-            "Fixed Corotated",
-        );
-        ui.selectable_value(
-            self,
-            ConstituveModels::SnowPlasticity(SnowPlasticity::default()),
-            "Snow Plasticity",
-        );
+        egui::ComboBox::from_label("")
+            .selected_text(format!("{}", self))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    self,
+                    ConstituveModels::NeoHookean(NeoHookean::default()),
+                    "NeoHookean",
+                );
+                ui.selectable_value(
+                    self,
+                    ConstituveModels::NewtonianFluid(NewtonianFluid::default()),
+                    "Newtonian Fluid",
+                );
+                ui.selectable_value(
+                    self,
+                    ConstituveModels::FixedCorotated(FixedCorotated::default()),
+                    "Fixed Corotated",
+                );
+                ui.selectable_value(
+                    self,
+                    ConstituveModels::SnowPlasticity(SnowPlasticity::default()),
+                    "Snow Plasticity",
+                );
+            });
         ui.end_row();
 
         match self {
