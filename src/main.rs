@@ -1,4 +1,5 @@
 mod collisions;
+mod fem;
 mod initial_condition;
 mod mpm;
 mod render;
