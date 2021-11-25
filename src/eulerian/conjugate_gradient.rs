@@ -1,7 +1,7 @@
-type Float = f64;
+type Real = f64;
 
-type CGMatrix = na::Matrix4<Float>;
-type CGVector = na::Vector4<Float>;
+type CGMatrix = na::Matrix4<Real>;
+type CGVector = na::Vector4<Real>;
 
 trait KrylovSystem {
     type KrylovVector;
@@ -10,24 +10,24 @@ trait KrylovSystem {
 }
 
 #[allow(non_snake_case)]
-fn conjugate_gradient(A: CGMatrix, b: CGVector, tol: Float) -> CGVector {
+fn conjugate_gradient(A: CGMatrix, b: CGVector, tol: Real) -> CGVector {
     let mut x = CGVector::zeros();
     let mut r = b - A * x;
     let mut p = r;
 
     loop {
         let s = A * p;
-        let alpha = r.dot(&r) / (p.dot(&s));
-        x = x + alpha * p;
+        let alpha = r.dot(&r) / (p.dot(&s)); // step length
+        x = x + alpha * p; // approximate solution
         let r_prev = r;
-        r = r - alpha * s;
+        r = r - alpha * s; // calculate residual
 
         if r.abs().max() < tol {
             return x;
         }
 
-        let beta = r.dot(&r) / r_prev.dot(&r_prev);
-        p = r + beta * p;
+        let beta = r.dot(&r) / r_prev.dot(&r_prev); // improvement this step
+        p = r + beta * p; // new search direction
     }
 }
 
