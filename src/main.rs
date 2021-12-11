@@ -4,6 +4,7 @@ mod mpm;
 mod render;
 mod sph;
 mod statistics;
+mod util;
 
 extern crate nalgebra as na;
 
@@ -25,6 +26,19 @@ pub trait Simulation: Send {
     fn simulate_frame(&mut self) -> Vec<Vertex>;
 
     fn add_particle(&mut self, mass: Scalar, position: Vec3, velocity: Vec3);
+}
+
+pub mod math {
+    pub const DIM: usize = 3;
+
+    pub type Dim = na::Const<DIM>;
+
+    pub type T = f64;
+    pub type TV = na::SVector<T, DIM>;
+    pub type IV = na::SVector<isize, DIM>;
+    pub type UV = na::SVector<usize, DIM>;
+
+    pub type Mat = na::SMatrix<T, DIM, DIM>;
 }
 
 #[derive(StructOpt, Debug)]

@@ -1,33 +1,27 @@
-type Real = f64;
-
-type CGMatrix = na::Matrix4<Real>;
-type CGVector = na::Vector4<Real>;
-
-trait KrylovSystem {
-    type KrylovVector;
-
-    fn apply(&self, x: Self::KrylovVector) -> Self::KrylovVector;
-}
+use crate::math::*;
+use nalgebra_sparse::csr::CsrMatrix;
 
 #[allow(non_snake_case)]
-fn conjugate_gradient(A: CGMatrix, b: CGVector, tol: Real) -> CGVector {
-    let mut x = CGVector::zeros();
-    let mut r = b - A * x;
-    let mut p = r;
+fn conjugate_gradient(A: &CsrMatrix<T>, b: &na::DVector<T>, tol: T) -> na::DVector<T> {
+    let mut x = na::DVector::zeros(b.nrows());
+    let m: na::DVector<_> = A * &x;
+    let mut r = b - m;
+    let mut p = r.clone();
 
     loop {
-        let s = A * p;
+        let s = A * &p;
         let alpha = r.dot(&r) / (p.dot(&s)); // step length
-        x = x + alpha * p; // approximate solution
-        let r_prev = r;
-        r = r - alpha * s; // calculate residual
+        x = x + alpha * &p; // approximate solution
+        let r_next = &r - alpha * s; // calculate residual
 
-        if r.abs().max() < tol {
+        if &r.abs().max() < &tol {
             return x;
         }
 
-        let beta = r.dot(&r) / r_prev.dot(&r_prev); // improvement this step
-        p = r + beta * p; // new search direction
+        let beta = r_next.dot(&r_next) / r.dot(&r); // improvement this step
+        p = &r_next + beta * &p; // new search direction
+
+        r = r_next;
     }
 }
 
@@ -36,6 +30,9 @@ mod tests {
     use super::*;
     #[test]
     fn test_conjugate_gradient() {
+        type CGMatrix = na::Matrix4<T>;
+        type CGVector = na::Vector4<T>;
+
         fn solve(A: CGMatrix, b: CGVector) -> CGVector {
             A.try_inverse().unwrap() * b
         }
