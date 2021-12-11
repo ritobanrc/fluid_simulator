@@ -12,8 +12,10 @@ pub struct SphSimulation {
     pub positions: Vec<Vec3>,
     pub velocities: Vec<Vec3>,
     pub force: Vec<Vec3>,
+    pub density: Vec<Scalar>,
     pub grid: Grid,
     pub params: SphParamaters,
+    pub time: Scalar,
 }
 
 impl SphSimulation {
@@ -35,6 +37,7 @@ impl Simulation for SphSimulation {
             masses: Vec::new(),
             positions: Vec::new(),
             velocities: Vec::new(),
+            density: Vec::new(),
             force: Vec::new(),
             grid: Grid::new(
                 (grid_bounds.x / params.h) as usize,
@@ -42,6 +45,7 @@ impl Simulation for SphSimulation {
                 (grid_bounds.z / params.h) as usize,
             ),
             params,
+            time: 0.,
         }
     }
 
@@ -55,6 +59,7 @@ impl Simulation for SphSimulation {
         self.positions.push(position);
         self.velocities.push(velocity);
         self.force.push(Vec3::zeros());
+        self.density.push(0.);
 
         self.grid
             .add_particle(self.position_to_coord(position), index);
@@ -68,21 +73,17 @@ fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
     // `s.positions[i]`
     let mut verts = Vec::with_capacity(s.params.num_particles);
 
-    let mut densities: Vec<Scalar> = Vec::with_capacity(s.params.num_particles);
+    s.density.fill(0.);
 
     for i in 0..s.params.num_particles {
         let neighbors = s.grid.get_neighbors(s.coord(i));
-        densities.push(
-            neighbors
-                .map(|j| {
-                    s.masses[j] * Poly6Kernel::value(s.positions[i] - s.positions[j], s.params.h)
-                })
-                .sum(),
-        );
+        s.density[i] = neighbors
+            .map(|j| s.masses[j] * Poly6Kernel::value(s.positions[i] - s.positions[j], s.params.h))
+            .sum()
     }
 
     for i in 0..s.params.num_particles {
-        let pressure_i: Scalar = s.params.k * (densities[i] - s.params.rest_density);
+        let pressure_i: Scalar = s.params.k * (s.density[i] - s.params.rest_density);
         let neighbors = s.grid.get_neighbors(s.coord(i));
 
         let force_pressure = -neighbors
@@ -97,9 +98,9 @@ fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
                     return Vec3::zeros();
                 }
 
-                let pressure_j = s.params.k * (densities[j] - s.params.rest_density);
+                let pressure_j = s.params.k * (s.density[j] - s.params.rest_density);
 
-                s.masses[j] * (pressure_i + pressure_j) / (2. * densities[j])
+                s.masses[j] * (pressure_i + pressure_j) / (2. * s.density[j])
                     * SpikyKernel::gradient(r_ij, s.params.h)
             })
             .sum::<Vec3>();
@@ -118,17 +119,17 @@ fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
                         return Vec3::zeros();
                     }
 
-                    s.masses[j] * vdiff / densities[j]
+                    s.masses[j] * vdiff / s.density[j]
                         * ViscosityKernel::laplacian(r_ij, s.params.h)
                 })
                 .sum::<Vec3>();
 
-        let force_gravity = s.params.gravity * densities[i];
+        let force_gravity = s.params.gravity * s.density[i];
         s.force[i] = force_pressure + force_viscosity + force_gravity;
     }
 
     for i in 0..s.params.num_particles {
-        s.velocities[i] = s.velocities[i] + s.params.delta_time / densities[i] * s.force[i];
+        s.velocities[i] = s.velocities[i] + s.params.delta_time / s.density[i] * s.force[i];
         let old_coord = s.coord(i);
         s.positions[i] = s.positions[i] + s.params.delta_time * s.velocities[i];
 
@@ -153,6 +154,8 @@ fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
             color: [vel, 0.5 * vel + 0.5, 1.],
         });
     }
+
+    s.time += s.params.delta_time;
 
     verts
 }
