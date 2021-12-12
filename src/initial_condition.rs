@@ -53,6 +53,8 @@ impl InitialCondition for Block {
 
             s.add_particle(mass, pos, Vector3::zeros());
         }
+
+        println!("Added {:?} particles.", counts.iter().product::<usize>());
     }
 }
 

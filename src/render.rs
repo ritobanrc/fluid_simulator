@@ -95,7 +95,7 @@ impl epi::RepaintSignal for RepaintSignal {
     }
 }
 
-pub fn open_window() -> Result<(), RecvError> {
+pub fn open_window(files: Option<Vec<std::path::PathBuf>>) -> eyre::Result<()> {
     let event_loop = EventLoop::with_user_event();
     let mut size = PhysicalSize::new(1280, 720);
     let window = WindowBuilder::new()
@@ -124,6 +124,7 @@ pub fn open_window() -> Result<(), RecvError> {
     )));
 
     let mut ui_state = UIState::default();
+
     // -------------------------------------------
 
     let verticies = Vec::new();
@@ -135,6 +136,8 @@ pub fn open_window() -> Result<(), RecvError> {
     let mut rx = None;
 
     let mut stop_tx = None;
+
+    let mut frame_number = 0;
 
     event_loop.run(move |event, _, control_flow| {
         platform.handle_event(&event);
@@ -220,7 +223,23 @@ pub fn open_window() -> Result<(), RecvError> {
                     },
                 };
 
-                let vertices = if let Some(this_rx) = &rx {
+                let vertices = if let Some(files) = &files {
+                    let file = &files[frame_number];
+                    let expected = format!("{:03}.dat", frame_number);
+                    let name = file.file_name().unwrap();
+                    if name != &expected[..] {
+                        panic!(
+                            "File name not expected. Expected {:?}, found {:?}",
+                            expected, name
+                        );
+                    }
+                    let verts: Vec<Vertex> = rmp_serde::decode::from_read(
+                        std::fs::File::open(file)
+                            .expect(&format!("failed to open file: {:?}", file)),
+                    )
+                    .expect(&format!("failed to parse file: {:?}", file));
+                    verts
+                } else if let Some(this_rx) = &rx {
                     match this_rx.recv() {
                         Ok(verts) => verts,
                         Err(_) => {
@@ -240,7 +259,9 @@ pub fn open_window() -> Result<(), RecvError> {
                 state.update(&mut scene, ui_state.particle_size, &vertices);
 
                 match state.render(&scene, Some(egui_state)) {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        frame_number += 1;
+                    }
                     // Recreate the swap_chain if lost
                     Err(wgpu::SwapChainError::Lost) => state.resize(state.size),
                     // The system is out of memory, we should probably quit
@@ -291,7 +312,7 @@ impl Simulation for NopSimulation {
     }
 }
 
-fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<Vec<Vertex>> {
+pub fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<Vec<Vertex>> {
     match &ui_state.algorithm {
         ui::Algorithm::Mpm(params) => {
             match &params.constitutive_model {
@@ -406,7 +427,7 @@ fn start_simulation_helper<S: Simulation + 'static>(
                 return;
             }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                eprintln!("Main thread disconnected.");
+                eprintln!("Stop Recieved disconnected.");
                 return;
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => continue,

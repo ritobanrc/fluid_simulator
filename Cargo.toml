@@ -29,6 +29,7 @@ egui_wgpu_backend = "0.8.0"
 egui_winit_platform = "0.8.0"
 
 eyre = "0.6.5"
+rmp-serde = "0.15.5"
 
 [build-dependencies]
 eyre = "0.6.5"
