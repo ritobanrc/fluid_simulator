@@ -12,6 +12,7 @@ use winit::{
 mod camera;
 mod scene;
 mod state;
+mod texture;
 mod ui;
 
 pub use camera::{Camera, CameraController};

@@ -29,6 +29,7 @@ pub struct State {
     pub render_target: RenderTarget,
     pub size: winit::dpi::PhysicalSize<u32>,
     pub render_pipeline: Option<RenderPipeline>,
+    pub depth_texture: super::texture::Texture,
 }
 
 fn create_instance() -> Instance {
@@ -184,7 +185,13 @@ fn create_render_pipeline(
             clamp_depth: false,
             conservative: false,
         },
-        depth_stencil: None,
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: super::texture::Texture::DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less, // 1.
+            stencil: wgpu::StencilState::default(),     // 2.
+            bias: wgpu::DepthBiasState::default(),
+        }),
         multisample: wgpu::MultisampleState {
             count: 1,
             mask: !0,
@@ -205,6 +212,15 @@ impl State {
         let (device, queue) = create_device_queue(&adapter).await;
 
         let (sc_desc, swap_chain) = create_swapchain(&surface, &device, window.inner_size());
+
+        let size = window.inner_size();
+
+        let depth_texture = super::texture::Texture::create_depth_texture(
+            &device,
+            (size.width, size.height),
+            "depth_texture",
+        );
+
         let render_target = RenderTarget::SwapChain {
             surface,
             sc_desc,
@@ -215,8 +231,9 @@ impl State {
             device,
             queue,
             render_target,
-            size: window.inner_size(),
+            size,
             render_pipeline: None,
+            depth_texture,
         }
     }
 
@@ -231,12 +248,19 @@ impl State {
         let texture_size = winit::dpi::PhysicalSize::new(width, height);
         let render_target = create_render_texture(texture_size, &device);
 
+        let depth_texture = super::texture::Texture::create_depth_texture(
+            &device,
+            (width, height),
+            "depth_texture",
+        );
+
         Self {
             device,
             queue,
             render_target,
             size: texture_size,
             render_pipeline: None,
+            depth_texture,
         }
     }
 
@@ -259,6 +283,11 @@ impl State {
                 sc_desc.width = new_size.width;
                 sc_desc.height = new_size.height;
                 *swap_chain = self.device.create_swap_chain(surface, sc_desc);
+                self.depth_texture = super::texture::Texture::create_depth_texture(
+                    &self.device,
+                    (new_size.width, new_size.height),
+                    "depth_texture",
+                );
             }
             RenderTarget::Texture { .. } => {
                 panic!("Cannot resize a texture target.")
@@ -349,7 +378,14 @@ impl State {
                     store: true,
                 },
             }],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.depth_texture.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
         });
 
         let device = &self.device;
