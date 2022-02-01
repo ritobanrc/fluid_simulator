@@ -4,6 +4,7 @@ pub(crate) mod kernels;
 use grid::{Coord, Grid};
 
 use crate::render::Vertex;
+use crate::statistics::SimulationStatistics;
 use crate::{Scalar, Simulation, Vec3};
 use kernels::*;
 
@@ -156,6 +157,27 @@ fn sph_simulate_frame(s: &mut SphSimulation) -> Vec<Vertex> {
     }
 
     s.time += s.params.delta_time;
+
+    let pe = -s
+        .masses
+        .iter()
+        .zip(&s.positions)
+        .map(|(&m, x)| m * s.params.gravity.component_mul(x).sum())
+        .sum::<Scalar>();
+    let ke = s
+        .masses
+        .iter()
+        .zip(&s.velocities)
+        .map(|(&m, v)| m * v.dot(v))
+        .sum::<Scalar>();
+
+    println!(
+        "{:.2} {:.5} {:.5} {:.5}",
+        s.total_time(),
+        pe,
+        ke,
+        s.total_volume()
+    );
 
     verts
 }

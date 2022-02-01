@@ -79,7 +79,8 @@ impl SimulationStatistics for SphSimulation {
             .iter()
             .zip(&self.velocities)
             .map(|(&m, v)| m * v)
-            .sum()
+            .sum::<Vec3>()
+            - self.total_mass() * self.total_time() * self.params.gravity
     }
 
     fn total_angular_momentum(&self) -> Vec3 {
@@ -89,11 +90,19 @@ impl SimulationStatistics for SphSimulation {
     }
 
     fn total_energy(&self) -> Scalar {
-        self.masses
+        let pe = -self
+            .masses
+            .iter()
+            .zip(&self.positions)
+            .map(|(&m, x)| m * self.params.gravity.component_mul(x).sum())
+            .sum::<Scalar>();
+        let ke = self
+            .masses
             .iter()
             .zip(&self.velocities)
             .map(|(&m, v)| m * v.dot(v))
-            .sum()
+            .sum::<Scalar>();
+        pe + ke
     }
 
     fn total_volume(&self) -> Scalar {

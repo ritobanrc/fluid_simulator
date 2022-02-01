@@ -65,7 +65,37 @@ fn main() -> eyre::Result<()> {
 
             files.sort();
 
-            render::open_window(Some(files)).expect("Failed to recieve vertecies");
+            if let Some(output_dir) = opt.output_dir {
+                let (tx, rx) = std::sync::mpsc::channel();
+                let mut frame_number = 0;
+
+                std::thread::spawn(move || loop {
+                    let file = &files[frame_number];
+                    let expected = format!("{:03}.dat", frame_number);
+                    let name = file.file_name().unwrap();
+                    if name != &expected[..] {
+                        panic!(
+                            "File name not expected. Expected {:?}, found {:?}",
+                            expected, name
+                        );
+                    }
+                    let verts: Vec<Vertex> = rmp_serde::decode::from_read(
+                        std::fs::File::open(file)
+                            .expect(&format!("failed to open file: {:?}", file)),
+                    )
+                    .expect(&format!("failed to parse file: {:?}", file));
+
+                    frame_number += 1;
+
+                    tx.send(verts).unwrap();
+                });
+
+                std::fs::create_dir_all(&output_dir).unwrap();
+                render::render_texture(output_dir, rx, 1920, 1080, opt.frames)
+                    .expect("Failed to recieve verticies");
+            } else {
+                render::open_window(Some(files)).expect("Failed to recieve vertecies");
+            }
         } else if input_file.extension().unwrap() == "json" {
             if let Some(path) = opt.output_dir {
                 let ui_state: render::UIState = std::fs::read(&input_file)
@@ -80,7 +110,7 @@ fn main() -> eyre::Result<()> {
                 let vert_rx = render::start_simulation(&ui_state, stop_rx);
 
                 for frame in 0..opt.frames {
-                    println!("starting Frame: {:?}", frame);
+                    //println!("starting Frame: {:?}", frame);
                     let verts = vert_rx.recv()?;
                     let mut path = path.clone();
                     path.push(format!("{:03}.dat", frame));
