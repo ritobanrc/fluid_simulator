@@ -45,11 +45,8 @@ pub mod math {
 #[structopt(name = "sph_solver")]
 struct Opt {
     #[structopt(short, long)]
-<<<<<<< HEAD
-=======
     input_file: Option<std::path::PathBuf>,
     #[structopt(short, long)]
->>>>>>> scef
     output_dir: Option<std::path::PathBuf>,
     #[structopt(short, long, default_value = "600")]
     frames: usize,
@@ -79,15 +76,7 @@ fn setup_tracing() {
 fn main() -> eyre::Result<()> {
     let opt = Opt::from_args();
 
-<<<<<<< HEAD
-    //setup_tracing();
-
-    use crate::initial_condition::InitialCondition;
-    if let Some(path) = opt.output_dir {
-        let (tx, rx) = channel::<Vec<Vertex>>();
-=======
     use eyre::WrapErr;
->>>>>>> scef
 
     if let Some(input_file) = opt.input_file {
         if input_file.is_dir() {
