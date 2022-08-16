@@ -207,7 +207,7 @@ pub fn open_window(files: Option<Vec<std::path::PathBuf>>) -> eyre::Result<()> {
                 if should_start_simulation && rx.is_none() {
                     let (new_stop_tx, new_stop_rx) = std::sync::mpsc::channel();
                     stop_tx = Some(new_stop_tx);
-                    rx = Some(start_simulation(&ui_state, new_stop_rx));
+                    rx = Some(start_simulation(&ui_state, new_stop_rx, None));
                 }
 
                 let (_output, paint_commands) = platform.end_frame();
@@ -313,7 +313,11 @@ impl Simulation for NopSimulation {
     }
 }
 
-pub fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<Vec<Vertex>> {
+pub fn start_simulation(
+    ui_state: &ui::UIState,
+    stop_rx: Receiver<()>,
+    last_frame: Option<usize>,
+) -> Receiver<Vec<Vertex>> {
     match &ui_state.algorithm {
         ui::Algorithm::Mpm(params) => {
             match &params.constitutive_model {
@@ -334,6 +338,7 @@ pub fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiv
                         },
                         &ui_state.initial_condition,
                         stop_rx,
+                        last_frame,
                     )
                 }
 
@@ -351,6 +356,7 @@ pub fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiv
                         },
                         &ui_state.initial_condition,
                         stop_rx,
+                        last_frame,
                     )
                 }
 
@@ -368,6 +374,7 @@ pub fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiv
                         },
                         &ui_state.initial_condition,
                         stop_rx,
+                        last_frame,
                     )
                 }
 
@@ -388,6 +395,7 @@ pub fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiv
                         },
                         &ui_state.initial_condition,
                         stop_rx,
+                        last_frame,
                     )
                 }
             }
@@ -396,6 +404,7 @@ pub fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiv
             params.clone(),
             &ui_state.initial_condition,
             stop_rx,
+            last_frame,
         ),
     }
 }
@@ -404,6 +413,7 @@ fn start_simulation_helper<S: Simulation + 'static>(
     params: S::Parameters,
     initial_condition: &ui::InitialConditions,
     stop_rx: Receiver<()>,
+    last_frame: Option<usize>,
 ) -> Receiver<Vec<Vertex>> {
     let mut s = S::new(params);
     let (tx, rx) = std::sync::mpsc::channel();
@@ -417,21 +427,32 @@ fn start_simulation_helper<S: Simulation + 'static>(
     //s.params.num_particles
     //);
 
-    std::thread::spawn(move || loop {
-        let verts = s.simulate_frame();
+    std::thread::spawn(move || {
+        let mut num_frames = 0;
+        loop {
+            let verts = s.simulate_frame();
 
-        tx.send(verts).unwrap();
+            tx.send(verts).unwrap();
 
-        match stop_rx.try_recv() {
-            Ok(()) => {
-                println!("Stopping simulation.");
-                return;
+            match stop_rx.try_recv() {
+                Ok(()) => {
+                    println!("Stopping simulation.");
+                    return;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    eprintln!("Stop Recieved disconnected.");
+                    return;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
             }
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                eprintln!("Stop Recieved disconnected.");
-                return;
+
+            num_frames += 1;
+            if let Some(last_frame) = last_frame {
+                if num_frames >= last_frame {
+                    println!("Finished simulation w/ {:?} frames.", num_frames);
+                    return;
+                }
             }
-            Err(std::sync::mpsc::TryRecvError::Empty) => continue,
         }
     });
 

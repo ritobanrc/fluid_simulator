@@ -1,6 +1,6 @@
-/// This module contains all of the _data_ that is going to be sent to the GPU. Essentially, all
-/// of the data that describes the scene. This includes vertex buffers, uniforms, the clear color,
-/// and camera position.
+//! This module contains all of the _data_ that is going to be sent to the GPU. Essentially, all
+//! of the data that describes the scene. This includes vertex buffers, uniforms, the clear color,
+//! and camera position.
 use crate::render::{Camera, CameraController};
 use wgpu::util::DeviceExt;
 
@@ -85,6 +85,7 @@ impl Uniforms {
         self.view_proj = camera.build_view_projection_matrix().into();
     }
 }
+
 /// This contains all of the GPU-associated state relating to uniforms, including the buffer and
 /// the bind group
 pub struct UniformState {

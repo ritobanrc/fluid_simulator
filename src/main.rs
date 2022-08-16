@@ -107,7 +107,7 @@ fn main() -> eyre::Result<()> {
                     })?;
 
                 let (stop_tx, stop_rx) = std::sync::mpsc::channel();
-                let vert_rx = render::start_simulation(&ui_state, stop_rx);
+                let vert_rx = render::start_simulation(&ui_state, stop_rx, Some(opt.frames));
 
                 for frame in 0..opt.frames {
                     //println!("starting Frame: {:?}", frame);

@@ -194,8 +194,64 @@ impl EulerianSimulation {
     }
 }
 
-fn interpolate_node<Z>(grid: &Grid, z: &ArrayNd<Z>, x: TV) -> Z {
-    todo!()
+//type Vector<T, const D: usize> = na::SVector<T, D>;
+
+#[derive(Debug, Clone)]
+enum InterpolationData<const SS: usize> {
+    Value(T),
+    Vector(na::SVector<T, SS>),
+    Matrix(na::SMatrix<T, SS, SS>),
+    Tensor(na::SMatrix<na::SVector<T, SS>, SS, SS>),
+}
+
+impl<const SS: usize> InterpolationData<SS> {
+    fn combine(self, weights: na::SVector<T, SS>) -> Self {
+        match self {
+            InterpolationData::Value(_) => self,
+            InterpolationData::Vector(v) => InterpolationData::Value(v.dot(&weights)),
+            InterpolationData::Matrix(m) => InterpolationData::Vector(m * weights),
+            InterpolationData::Tensor(t) => {
+                InterpolationData::Matrix(na::SMatrix::<T, SS, SS>::from_fn(|i, j| {
+                    (0..SS).map(|k| t[(i, j)][k] * weights[k]).sum()
+                }))
+            }
+        }
+    }
+}
+
+fn interpolate_node(grid: &Grid, z: &ArrayNd<T>, x: TV) -> T {
+    let scaled = (x - grid.domain.start).component_mul(&grid.one_over_dx);
+    let node = scaled.map(T::floor);
+    let z = scaled - node;
+    let node_idx: UV = node.map(|x| x as usize);
+
+    let mut data = get_data(node_idx, z);
+    loop {
+        data = data.combine();
+        if let InterpolationData::Value(x) = data {
+            return x;
+        }
+    }
+}
+
+#[cfg(feature = "2d")]
+fn get_data<const SS: usize>(base_idx: UV, z: &ArrayNd<Z>) -> InterpolationData<SS> {
+    let matrix = na::SMatrix::<T, SS, SS>::from_fn(|i, j| {
+        let idx = base_idx + UV::new(i, j);
+        z[idx]
+    });
+
+    InterpolationData::Matrix(matrix)
+}
+
+#[cfg(feature = "3d")]
+fn get_data<const SS: usize>(node_idx: UV, z: &ArrayNd<Z>) -> InterpolationData<SS> {
+    let matrix = na::SMatrix::<T, SS, SS>::from_fn(|i, j| {
+        let idx = base_idx + UV::new(i, j);
+        z[idx]
+    });
+
+    InterpolationData::Tensor(matrix)
 }
 
 fn interpolate_cell<Z>(grid: &Grid, z: &ArrayNd<Z>, x: TV) -> Z {
@@ -210,6 +266,12 @@ trait InterpolateFace<Z> {
     fn interpolate_face(grid: &Grid, z: &MacArray<Z>, x: TV) -> na::SVector<Z, DIM>;
     fn gradient_face(grid: &Grid, z: &MacArray<Z>, x: TV) -> na::SVector<Z, DIM>;
     fn hessian_face(grid: &Grid, z: &MacArray<Z>, x: TV) -> na::SVector<Z, DIM>;
+}
+
+trait InterpolateNode<Z> {
+    fn interpolate_node(grid: &Grid, z: &ArrayNd<Z>, x: TV) -> Z;
+    fn gradient_node(grid: &Grid, z: &ArrayNd<Z>, x: TV) -> Z;
+    fn hessian_node(grid: &Grid, z: &ArrayNd<Z>, x: TV) -> Z;
 }
 
 trait InterpolationOutput {
@@ -245,23 +307,12 @@ impl InterpolationStencil for LinearStencil {
     }
 
     fn hess(t: T) -> Self::Output {
-        na::vector![-1., 1.]
+        na::vector![0., 0.]
     }
 }
 
 impl<Z, Stencil: InterpolationStencil + Default> InterpolateFace<Z> for Stencil {
     fn interpolate_face(grid: &Grid, z: &MacArray<Z>, x: TV) -> na::SVector<Z, DIM> {
-        let stencil = Stencil::default();
-        let ss = Stencil::Output::stencil_size();
-        let half_stencil_width = 0.5 * Stencil::Output::stencil_size() as T;
-        let pos = (x - grid.domain.start).component_mul(&grid.one_over_dx)
-            - TV::from_element(half_stencil_width);
-
-        for axis in 0..DIM {
-            let pos_axis = pos + TV::ith(axis, 0.5);
-            let bottom_left_idx = pos.map(|x| x.floor() as usize); // NOTE: there should be a clamp here see physbam code
-        }
-
         todo!()
     }
 
@@ -305,6 +356,8 @@ fn rk2_integrate<V: Fn(TV) -> TV>(x: TV, vel: &V, dt: T) -> TV {
 }
 
 /// Represents a Grid (Co-located or Staggered) in world space.
+///
+/// Note that integer multiples of `dx` are the locations of nodes, and the cell centers are offset by half a cell.
 #[derive(Serialize, Deserialize)]
 pub struct Grid {
     /// Represents the world-space domain of the grid.
@@ -395,6 +448,7 @@ impl Grid {
         self.domain.start + node.cast::<T>().component_mul(&self.dx)
     }
 
+    /// Get the location for a particular cell center
     pub fn cell_x(&self, cell: UV) -> TV {
         self.domain.start + (cell.cast::<T>() + TV::from_element(0.5)).component_mul(&self.dx)
     }
@@ -448,6 +502,7 @@ pub struct RangeIterator {
 }
 
 impl RangeIterator {
+    #[must_use]
     fn new(range: Range<UV>) -> Self {
         Self {
             index: range.start,
