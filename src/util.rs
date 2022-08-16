@@ -90,6 +90,42 @@ impl VecExt for Vec3 {
     }
 }
 
+impl VecExt for na::Vector3<isize> {
+    fn all_lt(&self, other: &Self) -> bool {
+        self.x < other.x && self.y < other.y && self.z < other.z
+    }
+
+    fn all_gt(&self, other: &Self) -> bool {
+        self.x > other.x && self.y > other.y && self.z > other.z
+    }
+
+    fn component_max(&self, other: &Self) -> Self {
+        self.zip_map(other, |a, b| a.max(b))
+    }
+
+    fn ones() -> Self {
+        Self::from_element(1)
+    }
+}
+
+impl VecExt for crate::math::UV {
+    fn all_lt(&self, other: &Self) -> bool {
+        self.x < other.x && self.y < other.y && self.z < other.z
+    }
+
+    fn all_gt(&self, other: &Self) -> bool {
+        self.x > other.x && self.y > other.y && self.z > other.z
+    }
+
+    fn component_max(&self, other: &Self) -> Self {
+        self.zip_map(other, |a, b| a.max(b))
+    }
+
+    fn ones() -> Self {
+        Self::from_element(1)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

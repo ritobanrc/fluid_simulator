@@ -19,6 +19,8 @@ use particles::MpmParticles;
 use self::grid::weights::ParticleGridWeights;
 use self::models::ConstitutiveModel;
 
+use crate::statistics::SimulationStatistics;
+
 type Scalar = f64;
 type Vec3 = Vector3<Scalar>;
 
@@ -348,9 +350,19 @@ impl<CM: ConstitutiveModel> Simulation for MpmSimulation<CM> {
             self.advect_particles(dt);
 
             num_substeps += 1;
+            println!(
+                "substep {:?}, time {:?}, dt {:?}",
+                num_substeps, time_simulated, dt
+            );
         }
         self.time += time_simulated;
-        println!("Simulated frame with {:?} substeps. ", num_substeps);
+
+        //println!("{:.2} {:.5}", self.total_time(), self.total_volume());
+        println!(
+            "Simulated frame {:?} with {:?} substeps. ",
+            (self.time / self.params.delta_time).round(),
+            num_substeps
+        );
 
         self.create_verts()
     }

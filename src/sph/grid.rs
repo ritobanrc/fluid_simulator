@@ -6,7 +6,7 @@ use std::ops::{Index, IndexMut};
 /// Represents a single grid cell. A grid cell contains a list of the particles within it.
 ///
 /// A `SmallVec` is used to prevent unnecessary allocation.
-type GridCell = SmallVec<[usize; 2]>;
+type GridCell = SmallVec<[usize; 3]>;
 
 /// A 3d Coordinate composed of 3 integers.
 pub type Coord = Vector3<usize>;

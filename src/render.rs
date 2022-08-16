@@ -12,6 +12,7 @@ use winit::{
 mod camera;
 mod scene;
 mod state;
+mod texture;
 mod ui;
 
 pub use camera::{Camera, CameraController};
@@ -95,7 +96,7 @@ impl epi::RepaintSignal for RepaintSignal {
     }
 }
 
-pub fn open_window() -> Result<(), RecvError> {
+pub fn open_window(files: Option<Vec<std::path::PathBuf>>) -> eyre::Result<()> {
     let event_loop = EventLoop::with_user_event();
     let mut size = PhysicalSize::new(1280, 720);
     let window = WindowBuilder::new()
@@ -124,6 +125,7 @@ pub fn open_window() -> Result<(), RecvError> {
     )));
 
     let mut ui_state = UIState::default();
+
     // -------------------------------------------
 
     let verticies = Vec::new();
@@ -135,6 +137,8 @@ pub fn open_window() -> Result<(), RecvError> {
     let mut rx = None;
 
     let mut stop_tx = None;
+
+    let mut frame_number = 0;
 
     event_loop.run(move |event, _, control_flow| {
         platform.handle_event(&event);
@@ -203,7 +207,7 @@ pub fn open_window() -> Result<(), RecvError> {
                 if should_start_simulation && rx.is_none() {
                     let (new_stop_tx, new_stop_rx) = std::sync::mpsc::channel();
                     stop_tx = Some(new_stop_tx);
-                    rx = Some(start_simulation(&ui_state, new_stop_rx));
+                    rx = Some(start_simulation(&ui_state, new_stop_rx, None));
                 }
 
                 let (_output, paint_commands) = platform.end_frame();
@@ -220,7 +224,23 @@ pub fn open_window() -> Result<(), RecvError> {
                     },
                 };
 
-                let vertices = if let Some(this_rx) = &rx {
+                let vertices = if let Some(files) = &files {
+                    let file = &files[frame_number];
+                    let expected = format!("{:03}.dat", frame_number);
+                    let name = file.file_name().unwrap();
+                    if name != &expected[..] {
+                        panic!(
+                            "File name not expected. Expected {:?}, found {:?}",
+                            expected, name
+                        );
+                    }
+                    let verts: Vec<Vertex> = rmp_serde::decode::from_read(
+                        std::fs::File::open(file)
+                            .expect(&format!("failed to open file: {:?}", file)),
+                    )
+                    .expect(&format!("failed to parse file: {:?}", file));
+                    verts
+                } else if let Some(this_rx) = &rx {
                     match this_rx.recv() {
                         Ok(verts) => verts,
                         Err(_) => {
@@ -240,7 +260,9 @@ pub fn open_window() -> Result<(), RecvError> {
                 state.update(&mut scene, ui_state.particle_size, &vertices);
 
                 match state.render(&scene, Some(egui_state)) {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        frame_number += 1;
+                    }
                     // Recreate the swap_chain if lost
                     Err(wgpu::SwapChainError::Lost) => state.resize(state.size),
                     // The system is out of memory, we should probably quit
@@ -291,7 +313,11 @@ impl Simulation for NopSimulation {
     }
 }
 
-fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<Vec<Vertex>> {
+pub fn start_simulation(
+    ui_state: &ui::UIState,
+    stop_rx: Receiver<()>,
+    last_frame: Option<usize>,
+) -> Receiver<Vec<Vertex>> {
     match &ui_state.algorithm {
         ui::Algorithm::Mpm(params) => {
             match &params.constitutive_model {
@@ -313,6 +339,7 @@ fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<V
                         },
                         &ui_state.initial_condition,
                         stop_rx,
+                        last_frame,
                     )
                 }
 
@@ -331,6 +358,7 @@ fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<V
                         },
                         &ui_state.initial_condition,
                         stop_rx,
+                        last_frame,
                     )
                 }
 
@@ -349,6 +377,7 @@ fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<V
                         },
                         &ui_state.initial_condition,
                         stop_rx,
+                        last_frame,
                     )
                 }
 
@@ -370,6 +399,7 @@ fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<V
                         },
                         &ui_state.initial_condition,
                         stop_rx,
+                        last_frame,
                     )
                 }
             }
@@ -378,6 +408,7 @@ fn start_simulation(ui_state: &ui::UIState, stop_rx: Receiver<()>) -> Receiver<V
             params.clone(),
             &ui_state.initial_condition,
             stop_rx,
+            last_frame,
         ),
     }
 }
@@ -386,6 +417,7 @@ fn start_simulation_helper<S: Simulation + 'static>(
     params: S::Parameters,
     initial_condition: &ui::InitialConditions,
     stop_rx: Receiver<()>,
+    last_frame: Option<usize>,
 ) -> Receiver<Vec<Vertex>> {
     let mut s = S::new(params);
     let (tx, rx) = std::sync::mpsc::channel();
@@ -399,21 +431,32 @@ fn start_simulation_helper<S: Simulation + 'static>(
     //s.params.num_particles
     //);
 
-    std::thread::spawn(move || loop {
-        let verts = s.simulate_frame();
+    std::thread::spawn(move || {
+        let mut num_frames = 0;
+        loop {
+            let verts = s.simulate_frame();
 
-        tx.send(verts).unwrap();
+            tx.send(verts).unwrap();
 
-        match stop_rx.try_recv() {
-            Ok(()) => {
-                println!("Stopping simulation.");
-                return;
+            match stop_rx.try_recv() {
+                Ok(()) => {
+                    println!("Stopping simulation.");
+                    return;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    eprintln!("Stop Recieved disconnected.");
+                    return;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
             }
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                eprintln!("Main thread disconnected.");
-                return;
+
+            num_frames += 1;
+            if let Some(last_frame) = last_frame {
+                if num_frames >= last_frame {
+                    println!("Finished simulation w/ {:?} frames.", num_frames);
+                    return;
+                }
             }
-            Err(std::sync::mpsc::TryRecvError::Empty) => continue,
         }
     });
 
